@@ -346,13 +346,16 @@
 
                 const isPortrait = this.screenHeight > this.screenWidth;
                 if (isPortrait && this.isMobileDevice) {
-                    this.treeScale = this.screenWidth / 500;
+                    // FIXED: Smaller scale for mobile to fit screen completely
+                    this.treeScale = this.screenWidth / 650;
                 } else {
                     const baseSize = Math.min(this.screenWidth, this.screenHeight);
                     this.treeScale = baseSize / 850;
                 }
 
-                this.crownBaseY = this.centerY + (620 * this.treeScale) * 0.45;
+                // FIXED: Centering based on visual height
+                const approxTreeHeight = 620 * this.treeScale;
+                this.crownBaseY = this.centerY + approxTreeHeight * 0.45;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
@@ -405,7 +408,6 @@
             }
 
             createChristmasTreeCrown(multiplier = 1) {
-                // Reduced particles for mobile (1000) vs desktop (3500)
                 const particleCount = this.isMobileDevice ? 1000 : 3500;
                 const treeHeight = 620 * this.treeScale;
                 const maxRadius = 280 * this.treeScale;
@@ -481,7 +483,6 @@
                 }
             }
 
-            // NEW: Detailed Snowflakes from user script
             createSnowflakes() {
                 const snowflakeCount = this.isMobileDevice ? 300 : 500;
                 for (let i = 0; i < snowflakeCount; i++) {
@@ -517,20 +518,7 @@
             }
 
             handleClick(cx, cy) {
-                const check = (list) => {
-                    for (let g of list) {
-                        const dx = cx - (g.lastDrawX || -999);
-                        const dy = cy - (g.lastDrawY || -999);
-                        if (Math.hypot(dx, dy) < g.size * 2) {
-                            const m = document.getElementById('photoModal');
-                            const c = document.getElementById('photoContent');
-                            c.src = g.photo ? g.photo.src : '';
-                            if (g.photo) m.style.display = 'flex';
-                            return true;
-                        }
-                    }
-                };
-                check(this.gifts) || check(this.upperGifts) || check(this.topGifts);
+                // FIXED: Logic removed. Clicking does not open photo modal anymore.
             }
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
@@ -631,7 +619,6 @@
                     l.alpha = Math.min(1, l.baseAlpha * (0.6 + 0.8 * sinPart));
                 });
 
-                // NEW: Snowflake update logic from user script
                 this.snowflakes.forEach(s => {
                     if (s.growth < s.targetSize) { s.growth += s.growthSpeed; }
                     else { s.growth = 0; s.targetSize = Math.random() * 1.8 + 1; }
@@ -657,10 +644,7 @@
                 }
             }
 
-            // ADDED METHOD
-            startAnimation() {
-                this.draw();
-            }
+            startAnimation() { this.draw(); }
 
             draw() {
                 this.update();
@@ -686,7 +670,6 @@
                         });
                     }
 
-                    // Gifts & Photos (force source-over)
                     this.ctx.globalCompositeOperation = 'source-over';
                     this.ctx.globalAlpha = 1;
 
@@ -736,7 +719,6 @@
                         this.ctx.globalCompositeOperation = 'source-over';
                     }
 
-                    // NEW: Detailed Snowflake Drawing from user script
                     this.ctx.globalCompositeOperation = 'source-over';
                     this.ctx.globalAlpha = 1;
                     this.snowflakes.forEach(s => {
@@ -757,7 +739,6 @@
                 requestAnimationFrame(() => this.draw());
             }
 
-            // ... (keep drawGift, drawStar, drawLightGlow, hexToRgba)
             drawGift(x, y, size, rotation, boxColor, ribbonColor, glow = 0, sparkle = 0) {
                 const ctx = this.ctx;
                 ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
@@ -817,7 +798,6 @@
                 } catch (e) { return `rgba(255,255,255,${alpha})`; }
             }
 
-            // NEW SNOWFLAKE DRAWING METHODS
             drawHexagonSnowflake(x, y, size, rotation, opacity) {
                 const ctx = this.ctx; ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); ctx.globalAlpha = opacity;
                 ctx.beginPath(); ctx.arc(0, 0, size * 0.3, 0, Math.PI * 2); ctx.fillStyle = "rgba(255, 255, 255, 0.9)"; ctx.fill();
