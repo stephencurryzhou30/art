@@ -70,21 +70,26 @@
 
         #textContainer {
             position: fixed;
-            bottom: 3%;
+            bottom: 0;
+            /* Anchor to bottom */
             left: 0;
             width: 100%;
-            text-align: center;
+            height: 25vh;
+            /* Explicitly take bottom 25% */
+            display: flex;
+            align-items: center;
+            /* Center Vertically in that 25% */
+            justify-content: center;
+            /* Center Horizontally */
             pointer-events: none;
             z-index: 100;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
             mix-blend-mode: screen;
         }
 
         #mainText {
             font-family: 'Great Vibes', cursive;
-            font-size: clamp(36px, 6vw, 72px);
+            /* Adaptive Font: Fits width (10vw) but capped by height (8vh) to stay in box */
+            font-size: min(10vw, 8vh);
             font-weight: 400;
             letter-spacing: 3px;
             color: #FFD700;
@@ -92,6 +97,8 @@
             opacity: 0;
             transform: translateY(30px);
             animation: textFloatIn 2s ease-out forwards 1s, textGlow 3s ease-in-out infinite 3s;
+            margin-bottom: 2vh;
+            /* Slight lift */
         }
 
         @keyframes textFloatIn {
