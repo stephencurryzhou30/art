@@ -9,10 +9,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Great+Vibes&display=swap"
         rel="stylesheet">
 
-    <!-- MediaPipe Import -->
+    <!-- Import Map -->
     <script type="importmap">
         {
             "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
                 "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8"
             }
         }
@@ -26,50 +28,61 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        html,
         body {
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             overflow: hidden;
-            overscroll-behavior: none;
-            touch-action: none;
-        }
-
-        body {
             background: radial-gradient(circle at center, #1a1a3a 0%, #03030c 100%);
             font-family: 'Great Vibes', cursive;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
             user-select: none;
         }
 
-        #canvasContainer {
+        /* UI Layer */
+        #ui-container {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
         }
 
-        canvas {
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
+        /* Controls (Image Upload) */
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: auto;
+            display: flex;
+            gap: 10px;
         }
 
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #FFD700;
+            padding: 8px 16px;
+            border-radius: 20px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            font-family: sans-serif;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: rgba(255, 215, 0, 0.2);
+            transform: scale(1.05);
+        }
+
+        /* Footer Text */
         #textContainer {
-            position: fixed;
+            position: absolute;
             bottom: 3%;
-            left: 0;
             width: 100%;
             text-align: center;
             pointer-events: none;
-            z-index: 100;
         }
 
         #mainText {
@@ -80,7 +93,6 @@
             animation: textFloatIn 2s ease-out forwards 1s, textGlow 3s ease-in-out infinite 3s;
             opacity: 0;
             transform: translateY(30px);
-            display: inline-block;
         }
 
         @keyframes textFloatIn {
@@ -96,10 +108,10 @@
             }
         }
 
-        /* Camera & UI */
+        /* Camera Preview - Moved to TOP Right to avoid text obstruction */
         #webcam {
             position: absolute;
-            bottom: 20px;
+            top: 20px;
             right: 20px;
             width: 120px;
             height: 90px;
@@ -125,25 +137,6 @@
             box-shadow: 0 0 10px #00ffff;
         }
 
-        /* Controls */
-        #controls {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 200;
-        }
-
-        button {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            backdrop-filter: blur(5px);
-            cursor: pointer;
-            font-family: sans-serif;
-        }
-
         /* Photo Modal */
         #photoModal {
             display: none;
@@ -156,8 +149,8 @@
             z-index: 5000;
             justify-content: center;
             align-items: center;
-            flex-direction: column;
             backdrop-filter: blur(10px);
+            pointer-events: auto;
         }
 
         #photoContent {
@@ -167,7 +160,6 @@
             border-radius: 12px;
             box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
             animation: popIn 0.3s ease-out;
-            object-fit: contain;
         }
 
         @keyframes popIn {
@@ -185,55 +177,411 @@
 </head>
 
 <body>
-    <div id="canvasContainer">
-        <canvas id="christmasCanvas"></canvas>
+    <div id="ui-container">
+        <div class="controls">
+            <button id="btn-camera" onclick="initMediaPipe()">📷 开启手势</button>
+            <button id="btn-upload" onclick="document.getElementById('file-input').click()">🖼️ 切换图片</button>
+            <button id="btn-reset" onclick="resetToTree()">🎄 变回圣诞树</button>
+        </div>
         <div id="textContainer">
             <div id="mainText">Merry Christmas🎄</div>
         </div>
     </div>
 
-    <!-- UI Elements -->
-    <div id="controls">
-        <button id="btn-camera" onclick="initMediaPipe()">📷 开启手势控制</button>
-    </div>
-
     <!-- Hidden Inputs -->
-    <input type="file" id="photoInput" accept="image/*" style="display: none;">
+    <input type="file" id="file-input" accept="image/*" style="display: none;">
 
     <!-- Video & Cursor -->
     <video id="webcam" autoplay playsinline></video>
     <div id="hand-cursor"></div>
 
     <!-- Modal -->
-    <div id="photoModal" onclick="closeModal()">
+    <div id="photoModal" onclick="this.style.display='none'">
         <img id="photoContent" src="" alt="Gift Photo">
-        <div style="color: white; margin-top: 10px; font-family: sans-serif;">点击任意处关闭</div>
     </div>
 
     <!-- Logic -->
     <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
-        // --- Global State ---
-        window.gestureState = 'idle'; // 'idle', 'explode', 'gather'
-        window.handPosition = { x: 0.5, y: 0.5 }; // Normalized 0-1
-        window.christmasAnimation = null;
+        // --- Config ---
+        const PARTICLE_COUNT = 5000;
+        const CANVAS_WIDTH = window.innerWidth;
+        const CANVAS_HEIGHT = window.innerHeight;
 
+        // --- State ---
+        let scene, camera, renderer, controls;
+        let particles, particleSystem;
+        let gifts = [];
+        let raycaster, mouse;
+
+        let particleMode = 'idle'; // 'idle', 'gather', 'explode'
+        let explosionFactor = 0; // 0 to 1
+
+        // MediaPipe
         let handLandmarker = undefined;
         let webcamRunning = false;
         let lastVideoTime = -1;
 
-        // --- MediaPipe Setup ---
+        // Init
+        initThree();
+        animate();
+
+        // --- Functions ---
+
+        function initThree() {
+            // Scene
+            scene = new THREE.Scene();
+            // Fog to hide edges
+            scene.fog = new THREE.FogExp2(0x0a0a2a, 0.002);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, CANVAS_WIDTH / CANVAS_HEIGHT, 1, 2000);
+            camera.position.set(0, 50, 400); // Look at tree center
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(CANVAS_WIDTH, CANVAS_HEIGHT);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = 1.0;
+            controls.maxDistance = 800;
+
+            // Lights (for Gifts)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffd700, 1, 500);
+            pointLight.position.set(50, 100, 50);
+            scene.add(pointLight);
+
+            // Raycaster
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            window.addEventListener('click', onMouseClick);
+            window.addEventListener('touchstart', onTouchStart);
+
+            // Particles
+            createTreeParticles();
+
+            // Image Upload Input
+            document.getElementById('file-input').addEventListener('change', handleImageUpload);
+        }
+
+        // --- Tree Generation (Ported from 2D Code) ---
+        function createTreeParticles() {
+            if (particleSystem) scene.remove(particleSystem);
+            gifts.forEach(g => scene.remove(g));
+            gifts = [];
+
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(PARTICLE_COUNT * 3);
+            const colors = new Float32Array(PARTICLE_COUNT * 3);
+            const initialPositions = new Float32Array(PARTICLE_COUNT * 3);
+
+            const colorHelper = new THREE.Color();
+            const TRUNK_COLORS = [0x5C3317, 0x6F4E37, 0x8B4513];
+            const LEAF_COLORS = [0x2E8B57, 0x3CB371, 0x20B2AA, 0x66CDAA, 0x00FA9A];
+            const LIGHT_COLORS = [0xFF6B9D, 0xFFD166, 0x7CE6E6, 0xFF8AF0, 0xFFA552];
+
+            let idx = 0;
+            const treeScale = 1.5; // Adjust for 3D scale
+
+            // 1. Trunk
+            const trunkCount = 800;
+            for (let i = 0; i < trunkCount && idx < PARTICLE_COUNT; i++) {
+                const p = i / trunkCount;
+                const h = 140 * treeScale;
+                const r = 50 * treeScale * (1 - 0.2 * p) * Math.sqrt(Math.random());
+                const angle = i * 2.4;
+                const y = -100 + p * h; // Base Y offset
+                const x = Math.cos(angle) * r;
+                const z = Math.sin(angle) * r;
+
+                setParticle(idx, x, y, z, TRUNK_COLORS[i % 3]);
+                idx++;
+            }
+
+            // 2. Crown
+            const crownCount = 3500;
+            for (let i = 0; i < crownCount && idx < PARTICLE_COUNT; i++) {
+                const p = i / crownCount;
+                const h = 620 * treeScale * p;
+                const r = 280 * treeScale * (1 - p) * Math.sqrt(Math.random());
+                const angle = i * 2.4 + p * 10;
+                const x = Math.cos(angle) * r;
+                const z = Math.sin(angle) * r;
+                const y = -100 + 140 * treeScale * 0.8 + (620 * treeScale - h) - 300; // Adjust Y to center
+
+                const isLight = Math.random() < 0.15;
+                const col = isLight ? LIGHT_COLORS[Math.floor(Math.random() * LIGHT_COLORS.length)] : LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
+
+                setParticle(idx, x, y, z, col);
+                idx++;
+            }
+
+            // Fill rest
+            while (idx < PARTICLE_COUNT) {
+                setParticle(idx, 0, -1000, 0, 0x000000); // Hide unused
+                idx++;
+            }
+
+            function setParticle(i, x, y, z, hex) {
+                positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
+                initialPositions[i * 3] = x; initialPositions[i * 3 + 1] = y; initialPositions[i * 3 + 2] = z;
+                colorHelper.setHex(hex);
+                colors[i * 3] = colorHelper.r; colors[i * 3 + 1] = colorHelper.g; colors[i * 3 + 2] = colorHelper.b;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('initialPosition', new THREE.BufferAttribute(initialPositions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 4,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                transparent: true,
+                opacity: 0.9,
+                map: createCircleTexture()
+            });
+
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+
+            // Create 3D Gifts (Meshes)
+            createGifts(treeScale);
+        }
+
+        async function resetToTree() {
+            createTreeParticles();
+        }
+
+        function createGifts(scale) {
+            const GIFT_COLORS = [0xFF6B6B, 0x4ECDC4, 0x95E1D3, 0xFF8AF0];
+            // Simple random placement on tree surface
+            for (let i = 0; i < 15; i++) {
+                const hRatio = 0.2 + Math.random() * 0.6;
+                const h = 620 * scale * hRatio;
+                // Cone radius at height h
+                const maxR = 280 * scale * (1 - hRatio);
+                const r = maxR * 0.9;
+                const angle = Math.random() * Math.PI * 2;
+
+                const x = Math.cos(angle) * r;
+                const z = Math.sin(angle) * r;
+                const y = -100 + 140 * scale * 0.8 + (620 * scale - h) - 300;
+
+                const geo = new THREE.BoxGeometry(20, 20, 20);
+                const mat = new THREE.MeshPhongMaterial({
+                    color: GIFT_COLORS[i % GIFT_COLORS.length],
+                    emissive: 0x222222
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(x, y, z);
+                mesh.rotation.y = Math.random();
+
+                scene.add(mesh);
+                gifts.push(mesh);
+            }
+        }
+
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const img = new Image();
+                img.onload = function () {
+                    updateParticlesFromImage(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateParticlesFromImage(img) {
+            // Remove gifts in image mode
+            gifts.forEach(g => scene.remove(g));
+            gifts = [];
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            // Scale image to fit particle count approx
+            const aspect = img.width / img.height;
+            const targetHeight = 100; // Resolution
+            const targetWidth = Math.round(targetHeight * aspect);
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+            const data = ctx.getImageData(0, 0, targetWidth, targetHeight).data;
+            const positions = particleSystem.geometry.attributes.position.array;
+            const colors = particleSystem.geometry.attributes.color.array;
+            const initialPositions = particleSystem.geometry.attributes.initialPosition.array;
+
+            let pIdx = 0;
+            const colorHelper = new THREE.Color();
+
+            for (let y = 0; y < targetHeight; y++) {
+                for (let x = 0; x < targetWidth; x++) {
+                    if (pIdx >= PARTICLE_COUNT) break;
+
+                    const i = (y * targetWidth + x) * 4;
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    const a = data[i + 3];
+
+                    if (a > 128) {
+                        // Map to 3D space
+                        const px = (x - targetWidth / 2) * 4;
+                        const py = -(y - targetHeight / 2) * 4;
+                        const pz = 0;
+
+                        // Set Target (we will animate to this in loop? No, simplified: just set)
+                        // Better: Interpolate? For now, snap to position to "restore original way"
+                        positions[pIdx * 3] = px;
+                        positions[pIdx * 3 + 1] = py;
+                        positions[pIdx * 3 + 2] = pz;
+
+                        initialPositions[pIdx * 3] = px;
+                        initialPositions[pIdx * 3 + 1] = py;
+                        initialPositions[pIdx * 3 + 2] = pz;
+
+                        colorHelper.setRGB(r / 255, g / 255, b / 255);
+                        colors[pIdx * 3] = colorHelper.r;
+                        colors[pIdx * 3 + 1] = colorHelper.g;
+                        colors[pIdx * 3 + 2] = colorHelper.b;
+
+                        pIdx++;
+                    }
+                }
+            }
+
+            // Hide remaining
+            while (pIdx < PARTICLE_COUNT) {
+                positions[pIdx * 3 + 1] = -5000;
+                pIdx++;
+            }
+
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            particleSystem.geometry.attributes.color.needsUpdate = true;
+            particleSystem.geometry.attributes.initialPosition.needsUpdate = true;
+
+            // Reset Camera
+            controls.autoRotate = false;
+            camera.position.set(0, 0, 600);
+            camera.lookAt(0, 0, 0);
+        }
+
+        // --- Utils ---
+        function createCircleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32; canvas.height = 32;
+            const context = canvas.getContext('2d');
+            const grad = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            context.fillStyle = grad;
+            context.fillRect(0, 0, 32, 32);
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            checkIntersection();
+        }
+        function onTouchStart(event) {
+            if (event.touches.length > 0) {
+                mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+                checkIntersection();
+            }
+        }
+        function checkIntersection() {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(gifts);
+            if (intersects.length > 0) {
+                // Show Photo
+                document.getElementById('photoContent').src = "https://images.unsplash.com/photo-1543589077-47d81606c1bf?q=80&w=600"; // Sample
+                document.getElementById('photoModal').style.display = 'flex';
+            }
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = Date.now() * 0.001;
+            controls.update();
+
+            // Gesture Logic
+            // Explosion Factor
+            if (particleMode === 'explode') explosionFactor += (1 - explosionFactor) * 0.05;
+            else if (particleMode === 'gather') explosionFactor += (0 - explosionFactor) * 0.1;
+            else explosionFactor += (0 - explosionFactor) * 0.02;
+
+            if (particleSystem) {
+                const positions = particleSystem.geometry.attributes.position.array;
+                const initials = particleSystem.geometry.attributes.initialPosition.array;
+                const count = particleSystem.geometry.attributes.position.count;
+
+                for (let i = 0; i < count; i++) {
+                    const i3 = i * 3;
+                    const ix = initials[i3];
+                    const iy = initials[i3 + 1];
+                    const iz = initials[i3 + 2];
+
+                    if (iy < -2000) continue; // Hidden
+
+                    // Base Sway
+                    let tx = ix; let ty = iy; let tz = iz;
+
+                    // Add Sway (Simulate tree wind)
+                    if (Math.abs(ix) > 10) { // Keep trunk mostly still
+                        tx += Math.sin(time + iy * 0.01) * 2;
+                        tz += Math.cos(time + iy * 0.01) * 2;
+                    }
+
+                    // Apply Explosion
+                    if (explosionFactor > 0.01) {
+                        const dist = Math.sqrt(ix * ix + iy * iy + iz * iz) || 1;
+                        const blast = explosionFactor * 400; // Radius
+                        tx += (ix / dist) * blast + (Math.random() - 0.5) * 20;
+                        ty += (iy / dist) * blast + (Math.random() - 0.5) * 20;
+                        tz += (iz / dist) * blast + (Math.random() - 0.5) * 20;
+                    }
+
+                    positions[i3] = tx;
+                    positions[i3 + 1] = ty;
+                    positions[i3 + 2] = tz;
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- MediaPipe Boilerplate (Restored) ---
         window.initMediaPipe = async function () {
             const btn = document.getElementById('btn-camera');
-            btn.innerText = "⏳ 启动中...";
-
+            btn.innerText = "⏳ Doing Magic...";
             try {
-                const vision = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
-                );
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm");
 
-                // Try Local First logic
                 let success = false;
                 try {
                     handLandmarker = await HandLandmarker.createFromOptions(vision, {
@@ -241,22 +589,15 @@
                         runningMode: "VIDEO", numHands: 1
                     });
                     success = true;
-                } catch (e) { console.warn("Local model failed", e); }
+                } catch (e) { }
 
                 if (!success) {
-                    try {
-                        handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                            baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
-                            runningMode: "VIDEO", numHands: 1
-                        });
-                    } catch (e) {
-                        alert("模型加载失败，请确保目录下有 hand_landmarker.task 文件！");
-                        btn.innerText = "❌ 失败";
-                        return;
-                    }
+                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
+                        runningMode: "VIDEO", numHands: 1
+                    });
                 }
 
-                // Start Camera
                 const video = document.getElementById('webcam');
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 video.srcObject = stream;
@@ -264,525 +605,45 @@
                 webcamRunning = true;
                 video.style.visibility = 'visible';
                 document.getElementById('hand-cursor').style.display = 'block';
-                btn.innerText = "✅ 手势已开启";
-                setTimeout(() => btn.style.display = 'none', 2000); // Hide button after success
+                btn.innerText = "🛑 Stop";
+                btn.onclick = () => location.reload();
 
-            } catch (err) {
-                console.error(err);
-                alert("无法启动: " + err.message);
-                btn.innerText = "❌ 错误";
-            }
+            } catch (e) { alert("Error: " + e.message); }
         };
 
         async function predictWebcam() {
             const video = document.getElementById('webcam');
             const cursor = document.getElementById('hand-cursor');
-
             if (webcamRunning) {
                 let startTimeMs = performance.now();
                 if (lastVideoTime !== video.currentTime && video.readyState >= 2) {
                     lastVideoTime = video.currentTime;
                     const results = handLandmarker.detectForVideo(video, startTimeMs);
-
                     if (results.landmarks && results.landmarks.length > 0) {
                         const landmarks = results.landmarks[0];
+                        const x = 1 - landmarks[8].x;
+                        const y = landmarks[8].y;
+                        cursor.style.left = x * 100 + '%'; cursor.style.top = y * 100 + '%';
+
+                        // Gesture: Ratio
                         const wrist = landmarks[0];
-                        const middleMCP = landmarks[9];
+                        const mcp = landmarks[9];
+                        const scale = Math.sqrt(Math.pow(mcp.x - wrist.x, 2) + Math.pow(mcp.y - wrist.y, 2));
+                        const tips = [8, 12, 16, 20].map(i => landmarks[i]);
+                        const avgTipDist = tips.reduce((sum, t) => sum + Math.sqrt(Math.pow(t.x - wrist.x, 2) + Math.pow(t.y - wrist.y, 2)), 0) / 4;
+                        const ratio = avgTipDist / scale;
 
-                        // Hand Position (Index Tip)
-                        const tip = landmarks[8];
-                        // Mirror X
-                        const x = 1 - tip.x;
-                        const y = tip.y;
-
-                        window.handPosition = { x, y };
-                        cursor.style.left = (x * 100) + '%';
-                        cursor.style.top = (y * 100) + '%';
-
-                        // Gesture Recognition (Scale based)
-                        const handScale = Math.sqrt(Math.pow(middleMCP.x - wrist.x, 2) + Math.pow(middleMCP.y - wrist.y, 2));
-
-                        const tips = [8, 12, 16, 20];
-                        let totalTipDist = 0;
-                        tips.forEach(idx => {
-                            const t = landmarks[idx];
-                            totalTipDist += Math.sqrt(Math.pow(t.x - wrist.x, 2) + Math.pow(t.y - wrist.y, 2));
-                        });
-                        const avgTipDist = totalTipDist / 4;
-                        const ratio = avgTipDist / handScale;
-
-                        if (ratio < 1.1) {
-                            window.gestureState = 'gather'; // Fist
-                            cursor.style.borderColor = "yellow";
-                        } else if (ratio > 1.7) {
-                            window.gestureState = 'explode'; // Open
-                            cursor.style.borderColor = "magenta";
-                        } else {
-                            window.gestureState = 'idle';
-                            cursor.style.borderColor = "cyan";
-                        }
-
-                    } else {
-                        window.gestureState = 'idle';
-                    }
+                        if (ratio < 1.1) { particleMode = 'gather'; cursor.style.borderColor = 'yellow'; }
+                        else if (ratio > 1.7) { particleMode = 'explode'; cursor.style.borderColor = 'magenta'; }
+                        else { particleMode = 'idle'; cursor.style.borderColor = 'cyan'; }
+                    } else { particleMode = 'idle'; }
                 }
                 requestAnimationFrame(predictWebcam);
             }
         }
-    </script>
 
-    <!-- User's Christmas Animation Code (Modified) -->
-    <script>
-        // Modal Logic
-        const defaultPhoto = "https://images.unsplash.com/photo-1512909006721-3d6018887383?q=80&w=600&auto=format&fit=crop"; // Placeholder
-        let currentPhoto = defaultPhoto;
-
-        function showModal() {
-            const modal = document.getElementById('photoModal');
-            const img = document.getElementById('photoContent');
-            img.src = currentPhoto;
-            modal.style.display = 'flex';
-        }
-        window.closeModal = function () {
-            document.getElementById('photoModal').style.display = 'none';
-        }
-
-        // --- Christmas Animation Class (Injected) ---
-        class ChristmasAnimation {
-            constructor() {
-                this.canvas = document.getElementById('christmasCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.resizeTimeout = null;
-
-                this.isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
-                this.performanceMultiplier = this.isMobileDevice ? 0.7 : 1;
-
-                this.autoRotation = 0;
-                this.rotationSpeed = 0.005;
-                this.growthProgress = 0;
-                this.maxGrowth = 1;
-
-                // Explode State
-                this.explosionFactor = 0; // 0 = normal, 1 = fully exploded
-
-                this.setupCanvas();
-                this.initColors();
-                this.createScene();
-                this.setupInteraction();
-                this.draw();
-
-                window.addEventListener('resize', () => this.handleResize());
-            }
-
-            setupCanvas() {
-                this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-                this.screenWidth = window.innerWidth;
-                this.screenHeight = window.innerHeight;
-
-                this.canvas.width = Math.round(this.screenWidth * this.dpr);
-                this.canvas.height = Math.round(this.screenHeight * this.dpr);
-                this.canvas.style.width = '100vw';
-                this.canvas.style.height = '100vh';
-
-                this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-                this.ctx.scale(this.dpr, this.dpr);
-
-                this.centerX = this.screenWidth / 2;
-                this.centerY = this.screenHeight / 2;
-
-                const baseSize = Math.min(this.screenWidth, this.screenHeight);
-                this.treeScale = baseSize / 850;
-                if (this.isMobileDevice) this.treeScale *= 0.9;
-
-                this.trunkBaseY = this.screenHeight * 0.7;
-                this.crownBaseY = this.screenHeight * 0.82;
-            }
-
-            handleResize() {
-                if (this.resizeTimeout) clearTimeout(this.resizeTimeout);
-                this.resizeTimeout = setTimeout(() => {
-                    this.setupCanvas();
-                    this.createScene();
-                }, 250);
-            }
-
-            setupInteraction() {
-                // Click to Open Gift
-                this.canvas.addEventListener('click', (e) => {
-                    const rect = this.canvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    this.checkGiftClick(x, y);
-                });
-                this.canvas.addEventListener('touchstart', (e) => {
-                    if (e.touches.length > 0) {
-                        const t = e.touches[0];
-                        this.checkGiftClick(t.clientX, t.clientY);
-                    }
-                });
-            }
-
-            checkGiftClick(x, y) {
-                // Check all gift arrays
-                const allGifts = [...(this.gifts || []), ...(this.upperGifts || []), ...(this.topGifts || [])];
-                for (let g of allGifts) {
-                    // Simple distance check (approximate since they move)
-                    // We use their LAST drawn position
-                    const dx = x - g.lastDrawX;
-                    const dy = y - g.lastDrawY;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < g.size * this.treeScale * 1.5) { // Hit radius
-                        showModal();
-                        return;
-                    }
-                }
-            }
-
-            initColors() {
-                this.TREE_COLORS = ["#2E8B57", "#3CB371", "#20B2AA", "#66CDAA", "#00FA9A"];
-                this.LIGHT_COLORS = ["#FF6B9D", "#FFD166", "#7CE6E6", "#FF8AF0", "#FFA552", "#93FF9B"];
-                this.TRUNK_COLORS = ["#5C3317", "#6F4E37", "#8B4513"];
-                this.GIFT_COLORS = [
-                    { box: "#FF6B6B", ribbon: "#FFD166" }, { box: "#4ECDC4", ribbon: "#FFE66D" },
-                    { box: "#95E1D3", ribbon: "#F38181" }, { box: "#FF8AF0", ribbon: "#7CE6E6" }
-                ];
-                this.SPIRAL_LIGHT_COLORS = ["#FF6B9D", "#FFD166", "#7CE6E6", "#FF8AF0", "#4ECDC4"];
-            }
-
-            createScene() {
-                this.particles = [];
-                this.lights = [];
-                this.gifts = [];
-                this.upperGifts = [];
-                this.topGifts = [];
-                this.spiralLights = [];
-                this.snowflakes = []; // Added snowflakes array
-
-                const m = this.performanceMultiplier;
-
-                // Trunk
-                for (let i = 0; i < 800 * m; i++) {
-                    const p = this.createTrunkParticle(i, 800 * m);
-                    this.particles.push(p);
-                }
-                // Crown
-                for (let i = 0; i < 3000 * m; i++) {
-                    const p = this.createCrownParticle(i, 3000 * m);
-                    if (p.type === 'light') this.lights.push(p);
-                    else this.particles.push(p);
-                }
-                // Gifts
-                this.createGifts(this.gifts, 6 * m, 0.3, 0.5);
-                this.createGifts(this.upperGifts, 8 * m, 0.15, 0.6);
-                this.createGifts(this.topGifts, 5 * m, 0.05, 0.3);
-
-                // Spiral Lights
-                for (let i = 0; i < 100 * m; i++) {
-                    this.spiralLights.push(this.createSpiralLight(i, 100 * m));
-                }
-
-                // Snowflakes
-                for (let i = 0; i < 200 * m; i++) {
-                    this.snowflakes.push(this.createSnowflake());
-                }
-
-                this.createTopStar();
-            }
-
-            createTrunkParticle(i, total) {
-                const trunkHeight = 140 * this.treeScale;
-                const trunkRadius = 50 * this.treeScale;
-                const p = i / total;
-                const y = this.trunkBaseY + p * trunkHeight;
-                const angle = i * 2.39996;
-                const r = trunkRadius * (1 - 0.2 * p) * Math.sqrt(Math.random());
-                return {
-                    x: Math.cos(angle) * r, y: y, z: Math.sin(angle) * r,
-                    baseX: Math.cos(angle) * r, baseY: y, baseZ: Math.sin(angle) * r,
-                    color: this.TRUNK_COLORS[i % 3], size: Math.random() * 3 + 2,
-                    isTrunk: true,
-                    explodeVel: { x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 }
-                };
-            }
-
-            createCrownParticle(i, total) {
-                const treeHeight = 620 * this.treeScale;
-                const maxRadius = 280 * this.treeScale;
-                const p = i / total;
-                const spiralAngle = i * 2.4 + p * 10;
-                const h = treeHeight * p;
-                const r = maxRadius * (1 - p) * Math.sqrt(Math.random()) * 1.2;
-                const x = Math.cos(spiralAngle) * r;
-                const z = Math.sin(spiralAngle) * r;
-                const y = this.crownBaseY - h;
-
-                const isLight = Math.random() < 0.15;
-                const obj = {
-                    x: x, y: y, z: z,
-                    baseX: x, baseY: y, baseZ: z,
-                    color: isLight ? this.LIGHT_COLORS[Math.floor(Math.random() * this.LIGHT_COLORS.length)] : this.TREE_COLORS[Math.floor(Math.random() * 5)],
-                    size: isLight ? Math.random() * 3 + 2 : Math.random() * 2 + 1,
-                    type: isLight ? 'light' : 'leaf',
-                    spiralAngle: spiralAngle,
-                    p: p,
-                    explodeVel: { x: x * 0.02 + (Math.random() - 0.5) * 5, y: (Math.random() - 0.5) * 5 + (-h * 0.01) }
-                };
-                if (isLight) {
-                    obj.blinkSpeed = 1 + Math.random();
-                    obj.blinkOffset = Math.random() * Math.PI * 2;
-                }
-                return obj;
-            }
-
-            createGifts(arr, count, hRatioInfo, rRatioInfo) {
-                const treeHeight = 620 * this.treeScale;
-                const maxRadius = 280 * this.treeScale;
-                for (let i = 0; i < count; i++) {
-                    const hRatio = hRatioInfo + Math.random() * 0.1;
-                    const rRatio = rRatioInfo + Math.random() * 0.2;
-                    const h = treeHeight * hRatio;
-                    const r = maxRadius * (1 - hRatio) * rRatio;
-                    const angle = i * (Math.PI * 2 / count);
-                    const x = Math.cos(angle) * r;
-                    const z = Math.sin(angle) * r;
-                    const y = this.crownBaseY - h;
-                    const colorSet = this.GIFT_COLORS[i % this.GIFT_COLORS.length];
-                    arr.push({
-                        x: x, y: y, z: z, baseX: x, baseY: y, baseZ: z,
-                        color: colorSet.box, ribbon: colorSet.ribbon,
-                        size: (15 + Math.random() * 10) * this.treeScale,
-                        rotation: Math.random() * Math.PI,
-                        explodeVel: { x: x * 0.03, y: -5 }
-                    });
-                }
-            }
-
-            createSpiralLight(i, total) {
-                const treeHeight = 620 * this.treeScale;
-                const maxRadius = 280 * this.treeScale;
-                const t = i / total;
-                const h = treeHeight * t;
-                const r = maxRadius * (1 - t) * 1.0;
-                const angle = t * Math.PI * 10;
-                const x = Math.cos(angle) * r;
-                const z = Math.sin(angle) * r;
-                const y = this.crownBaseY - h;
-                return {
-                    x: x, y: y, z: z, baseX: x, baseY: y, baseZ: z,
-                    color: this.SPIRAL_LIGHT_COLORS[i % 5],
-                    size: 3, spiralAngle: angle,
-                    explodeVel: { x: x * 0.02, y: (Math.random() - 0.5) * 5 }
-                };
-            }
-
-            createTopStar() {
-                this.topStar = {
-                    x: 0, y: this.crownBaseY - 620 * this.treeScale - 30, z: 0,
-                    baseX: 0, baseY: this.crownBaseY - 620 * this.treeScale - 30, baseZ: 0,
-                    size: 30 * this.treeScale, color: '#FFD700',
-                    rotation: 0
-                };
-            }
-
-            createSnowflake() {
-                const x = Math.random() * this.screenWidth;
-                const y = Math.random() * this.screenHeight;
-                const speed = 1 + Math.random() * 3;
-                return { x, y, speed, size: Math.random() * 3 + 1 };
-            }
-
-            update() {
-                const time = Date.now() / 1000;
-                this.autoRotation += this.rotationSpeed;
-                if (this.growthProgress < 1) this.growthProgress += 0.005;
-
-                // --- GESTURE LOGIC ---
-                // Explode Factor Logic
-                const targetExplode = window.gestureState === 'explode' ? 1.0 : 0.0;
-                if (window.gestureState === 'gather') {
-                    // Fast restore
-                    this.explosionFactor += (0 - this.explosionFactor) * 0.1;
-                } else if (window.gestureState === 'explode') {
-                    // Explode out
-                    this.explosionFactor += (1 - this.explosionFactor) * 0.05;
-                } else {
-                    // Slowly return to normal
-                    this.explosionFactor += (0 - this.explosionFactor) * 0.02;
-                }
-
-                // Common Update Function
-                const updateEntity = (p) => {
-                    const rotation = this.autoRotation;
-                    const cos = Math.cos(rotation);
-                    const sin = Math.sin(rotation);
-
-                    // 1. Calculate Standard Tree Position
-                    let tx = p.baseX * cos - p.baseZ * sin;
-                    let tz = p.baseZ * cos + p.baseX * sin;
-                    let ty = p.baseY;
-
-                    // Add Sway if not trunk
-                    if (!p.isTrunk && p.spiralAngle) {
-                        ty += Math.sin(time * 2 + p.spiralAngle) * 2;
-                    }
-
-                    // 2. Apply Growth
-                    tx = tx * this.growthProgress + this.centerX * (1 - this.growthProgress); // Not quite right, keep it simple
-                    // Improved growth: Scale form from bottom?
-                    // Let's just scale positions from center
-                    if (p.isTrunk) ty = ty * this.growthProgress; // Simple Y scale?
-
-                    // Final centered coordinates
-                    let finalX = tx + this.centerX;
-                    let finalY = ty;
-
-                    // 3. Apply EXPLOSION (Offset from calculated position)
-                    // If exploded, add velocity-like offset based on base position
-                    if (this.explosionFactor > 0.01) {
-                        // Scatter outwards based on their original local position (tx, tz)
-                        // This gives a nice radial explosion from the rotating center
-                        const explodeMag = this.explosionFactor * 500; // Pixel spread
-
-                        // Use the current X/Z direction to push out
-                        // Normalize vector?
-                        const dist = Math.sqrt(p.baseX * p.baseX + p.baseY * p.baseY + p.baseZ * p.baseZ) || 1;
-                        const dirX = p.baseX / dist;
-                        const dirY = (p.baseY - this.centerY) / dist;
-
-                        finalX += dirX * explodeMag + (Math.random() - 0.5) * explodeMag * 0.5;
-                        finalY += dirY * explodeMag + (Math.random() - 0.5) * explodeMag * 0.5;
-                    }
-
-                    // Store for Draw
-                    p.drawX = finalX;
-                    p.drawY = finalY;
-                    p.drawZ = tz; // For z-sorting/sizing
-                };
-
-                [...this.particles, ...this.lights, ...this.gifts, ...this.upperGifts, ...this.topGifts, ...this.spiralLights].forEach(updateEntity);
-
-                // Update Star
-                if (this.topStar) {
-                    const s = this.topStar;
-                    s.rotation += 0.01;
-                    // Simple position update
-                    let tx = s.baseX; // 0
-                    let ty = s.baseY;
-                    // Explode
-                    if (this.explosionFactor > 0) ty -= this.explosionFactor * 200;
-                    s.drawX = tx + this.centerX;
-                    s.drawY = ty;
-                }
-
-                // Update Snowflakes
-                this.snowflakes.forEach(s => {
-                    s.y += s.speed;
-                    if (s.y > this.screenHeight) s.y = -10;
-                });
-            }
-
-            draw() {
-                this.update();
-                this.ctx.fillStyle = "#0a0a2a"; // Clear
-                this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
-                this.ctx.globalCompositeOperation = 'lighter';
-
-                const drawList = [...this.particles, ...this.lights, ...this.gifts, ...this.upperGifts, ...this.topGifts, ...this.spiralLights];
-                // Sort by Z seems nice but heavy. Canvas order is just draw order.
-                // Let's just draw.
-
-                // Draw Snow
-                this.ctx.fillStyle = "rgba(255,255,255,0.5)";
-                this.snowflakes.forEach(s => {
-                    this.ctx.beginPath();
-                    this.ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-                    this.ctx.fill();
-                });
-
-                drawList.forEach(p => {
-                    // Size perspective
-                    // Simple: Scale by z? 
-                    // p.drawZ is roughly +/- 300. 
-                    // Let's say camera is at z = 1000.
-                    const perspective = 800 / (800 - p.drawZ);
-                    const size = p.size * this.treeScale * perspective;
-
-                    if (size <= 0) return;
-
-                    // Save coords for click dection
-                    p.lastDrawX = p.drawX;
-                    p.lastDrawY = p.drawY;
-
-                    if (p.color) { // Particle / Light
-                        this.ctx.beginPath();
-                        this.ctx.arc(p.drawX, p.drawY, size, 0, Math.PI * 2);
-                        this.ctx.fillStyle = p.color;
-
-                        if (p.blinkSpeed) { // Light
-                            const alpha = 0.5 + 0.5 * Math.sin(Date.now() * 0.005 * p.blinkSpeed + p.blinkOffset);
-                            this.ctx.globalAlpha = alpha;
-                        } else {
-                            this.ctx.globalAlpha = 1;
-                        }
-                        this.ctx.fill();
-                        this.ctx.globalAlpha = 1;
-                    }
-                    else if (p.box) { // Gift (legacy struct) - wait, I used different struct logic in createGifts
-                        // ...
-                    }
-                    // Check logic for Gifts used in CreateScene
-                    // arr.push({ ..., color: box, ribbon: ribbon ... })
-                    if (p.ribbon) { // It's a gift
-                        this.drawGift(p.drawX, p.drawY, size, p.rotation, p.color, p.ribbon);
-                    }
-                });
-
-                // Star
-                if (this.topStar) {
-                    const s = this.topStar;
-                    this.drawStar(s.drawX, s.drawY, s.size * 1.5, s.rotation);
-                }
-
-                requestAnimationFrame(() => this.draw());
-            }
-
-            drawGift(x, y, size, rot, color, ribbon) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
-                this.ctx.rotate(rot);
-                this.ctx.fillStyle = color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
-                this.ctx.fillStyle = ribbon;
-                this.ctx.fillRect(-size / 2, -size / 6, size, size / 3); // Horz
-                this.ctx.fillRect(-size / 6, -size / 2, size / 3, size); // Vert
-                this.ctx.restore();
-            }
-
-            drawStar(x, y, size, rot) {
-                this.ctx.save();
-                this.ctx.translate(x, y);
-                this.ctx.rotate(rot);
-                this.ctx.fillStyle = "#FFD700";
-                this.ctx.beginPath();
-                for (let i = 0; i < 5; i++) {
-                    this.ctx.lineTo(Math.cos((18 + i * 72) / 180 * Math.PI) * size,
-                        -Math.sin((18 + i * 72) / 180 * Math.PI) * size);
-                    this.ctx.lineTo(Math.cos((54 + i * 72) / 180 * Math.PI) * size * 0.4,
-                        -Math.sin((54 + i * 72) / 180 * Math.PI) * size * 0.4);
-                }
-                this.ctx.fill();
-                this.ctx.shadowBlur = 20;
-                this.ctx.shadowColor = "gold";
-                this.ctx.fill();
-                this.ctx.restore();
-            }
-        }
-
-        // Init
-        window.onload = () => {
-            window.christmasAnimation = new ChristmasAnimation();
-        };
-
+        window.resetToTree = resetToTree;
+        window.initMediaPipe = initMediaPipe;
     </script>
 </body>
 
