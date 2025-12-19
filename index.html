@@ -9,15 +9,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Great+Vibes&display=swap"
         rel="stylesheet">
 
-    <!-- Import Map -->
+    <!-- MediaPipe Import -->
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8"
-            }
-        }
+    { "imports": { "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8" } }
     </script>
 
     <style>
@@ -28,46 +22,121 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        html,
         body {
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            overscroll-behavior: none;
+            touch-action: none;
             background: radial-gradient(circle at center, #1a1a3a 0%, #03030c 100%);
             font-family: 'Great Vibes', cursive;
-            user-select: none;
-        }
-
-        /* UI Layer */
-        #ui-container {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 10;
+            right: 0;
+            bottom: 0;
+            user-select: none;
+            cursor: pointer;
         }
 
-        /* Controls (Image Upload) */
+        #canvasContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        canvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #4ECDC4;
+            font-size: 20px;
+            z-index: 10;
+            font-family: 'Arial', sans-serif;
+            transition: opacity 0.5s;
+        }
+
+        #textContainer {
+            position: fixed;
+            bottom: 3%;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            mix-blend-mode: screen;
+        }
+
+        #mainText {
+            font-family: 'Great Vibes', cursive;
+            font-size: clamp(48px, 6vw, 72px);
+            font-weight: 400;
+            letter-spacing: 3px;
+            color: #FFD700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+            opacity: 0;
+            transform: translateY(30px);
+            animation: textFloatIn 2s ease-out forwards 1s, textGlow 3s ease-in-out infinite 3s;
+        }
+
+        @keyframes textFloatIn {
+            0% {
+                opacity: 0;
+                transform: translateY(30px)
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        @keyframes textGlow {
+
+            0%,
+            100% {
+                text-shadow: 0 0 10px gold
+            }
+
+            50% {
+                text-shadow: 0 0 25px gold
+            }
+        }
+
+        /* [New Features Styles] */
         .controls {
-            position: absolute;
+            position: fixed;
             top: 20px;
             left: 20px;
-            pointer-events: auto;
+            z-index: 200;
             display: flex;
             gap: 10px;
         }
 
         button {
             background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 215, 0, 0.4);
             color: #FFD700;
-            padding: 8px 16px;
+            padding: 8px 15px;
             border-radius: 20px;
             backdrop-filter: blur(5px);
-            cursor: pointer;
             font-family: sans-serif;
-            font-weight: bold;
+            cursor: pointer;
             transition: all 0.3s;
         }
 
@@ -76,50 +145,18 @@
             transform: scale(1.05);
         }
 
-        /* Footer Text */
-        #textContainer {
-            position: absolute;
-            bottom: 3%;
-            width: 100%;
-            text-align: center;
-            pointer-events: none;
-        }
-
-        #mainText {
-            font-family: 'Great Vibes', cursive;
-            font-size: clamp(48px, 6vw, 72px);
-            color: #FFD700;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
-            animation: textFloatIn 2s ease-out forwards 1s, textGlow 3s ease-in-out infinite 3s;
-            opacity: 0;
-            transform: translateY(30px);
-        }
-
-        @keyframes textFloatIn {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes textGlow {
-            50% {
-                text-shadow: 0 0 25px rgba(255, 215, 0, 1);
-            }
-        }
-
-        /* Camera Preview - Moved to TOP Right to avoid text obstruction */
         #webcam {
-            position: absolute;
-            top: 20px;
+            position: fixed;
+            bottom: 20px;
             right: 20px;
             width: 120px;
             height: 90px;
+            object-fit: cover;
             transform: scaleX(-1);
-            border-radius: 8px;
-            border: 2px solid rgba(0, 255, 255, 0.3);
-            visibility: hidden;
-            z-index: 1000;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+            border-radius: 10px;
+            z-index: 150;
+            display: none;
             opacity: 0.8;
             pointer-events: none;
         }
@@ -128,16 +165,21 @@
             position: fixed;
             width: 20px;
             height: 20px;
-            border: 2px solid #00ffff;
+            border: 2px solid cyan;
             border-radius: 50%;
             pointer-events: none;
             transform: translate(-50%, -50%);
             display: none;
-            z-index: 9999;
-            box-shadow: 0 0 10px #00ffff;
+            z-index: 300;
+            box-shadow: 0 0 10px cyan;
+            transition: background 0.2s;
         }
 
-        /* Photo Modal */
+        #hand-cursor.pinching {
+            background: rgba(0, 255, 255, 0.6);
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+
         #photoModal {
             display: none;
             position: fixed;
@@ -145,505 +187,561 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 5000;
-            justify-content: center;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 500;
             align-items: center;
-            backdrop-filter: blur(10px);
-            pointer-events: auto;
+            justify-content: center;
         }
 
         #photoContent {
             max-width: 90%;
-            max-height: 80%;
-            border: 4px solid #FFD700;
-            border-radius: 12px;
-            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
-            animation: popIn 0.3s ease-out;
-        }
-
-        @keyframes popIn {
-            from {
-                transform: scale(0.5);
-                opacity: 0;
-            }
-
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
+            max-height: 85%;
+            border: 4px solid gold;
+            border-radius: 10px;
+            box-shadow: 0 0 40px rgba(255, 215, 0, 0.2);
         }
     </style>
 </head>
 
 <body>
-    <div id="ui-container">
-        <div class="controls">
-            <button id="btn-camera" onclick="initMediaPipe()">📷 开启手势</button>
-            <button id="btn-upload" onclick="document.getElementById('file-input').click()">🖼️ 切换图片</button>
-            <button id="btn-reset" onclick="resetToTree()">🎄 变回圣诞树</button>
-        </div>
+    <div class="controls">
+        <button onclick="window.APP.initCamera()">📷 开启相机(手势)</button>
+        <button onclick="document.getElementById('fileInput').click()">🖼️ 放入照片</button>
+    </div>
+    <input type="file" id="fileInput" multiple accept="image/*" style="display:none"
+        onchange="window.APP.handleUpload(this)">
+
+    <div id="canvasContainer">
+        <canvas id="christmasCanvas"></canvas>
+        <div id="loading"></div>
         <div id="textContainer">
             <div id="mainText">Merry Christmas🎄</div>
         </div>
     </div>
 
-    <!-- Hidden Inputs -->
-    <input type="file" id="file-input" accept="image/*" style="display: none;">
-
-    <!-- Video & Cursor -->
-    <video id="webcam" autoplay playsinline></video>
+    <video id="webcam" autoplay playsinline muted></video>
     <div id="hand-cursor"></div>
+    <div id="photoModal" onclick="this.style.display='none'"><img id="photoContent"></div>
 
-    <!-- Modal -->
-    <div id="photoModal" onclick="this.style.display='none'">
-        <img id="photoContent" src="" alt="Gift Photo">
-    </div>
-
-    <!-- Logic -->
+    <!-- MediaPipe Logic -->
     <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
-        // --- Config ---
-        const PARTICLE_COUNT = 5000;
-        const CANVAS_WIDTH = window.innerWidth;
-        const CANVAS_HEIGHT = window.innerHeight;
+        window.HAND_STATE = { gesture: 'IDLE', x: 0, y: 0, pinching: false, active: false };
+        let handLandmarker;
+        let running = false;
 
-        // --- State ---
-        let scene, camera, renderer, controls;
-        let particles, particleSystem;
-        let gifts = [];
-        let raycaster, mouse;
-
-        let particleMode = 'idle'; // 'idle', 'gather', 'explode'
-        let explosionFactor = 0; // 0 to 1
-
-        // MediaPipe
-        let handLandmarker = undefined;
-        let webcamRunning = false;
-        let lastVideoTime = -1;
-
-        // Init
-        initThree();
-        animate();
-
-        // --- Functions ---
-
-        function initThree() {
-            // Scene
-            scene = new THREE.Scene();
-            // Fog to hide edges
-            scene.fog = new THREE.FogExp2(0x0a0a2a, 0.002);
-
-            // Camera
-            camera = new THREE.PerspectiveCamera(60, CANVAS_WIDTH / CANVAS_HEIGHT, 1, 2000);
-            camera.position.set(0, 50, 400); // Look at tree center
-
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(CANVAS_WIDTH, CANVAS_HEIGHT);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            document.body.appendChild(renderer.domElement);
-
-            // Controls
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = 1.0;
-            controls.maxDistance = 800;
-
-            // Lights (for Gifts)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-            scene.add(ambientLight);
-            const pointLight = new THREE.PointLight(0xffd700, 1, 500);
-            pointLight.position.set(50, 100, 50);
-            scene.add(pointLight);
-
-            // Raycaster
-            raycaster = new THREE.Raycaster();
-            mouse = new THREE.Vector2();
-            window.addEventListener('click', onMouseClick);
-            window.addEventListener('touchstart', onTouchStart);
-
-            // Particles
-            createTreeParticles();
-
-            // Image Upload Input
-            document.getElementById('file-input').addEventListener('change', handleImageUpload);
-        }
-
-        // --- Tree Generation (Ported from 2D Code) ---
-        function createTreeParticles() {
-            if (particleSystem) scene.remove(particleSystem);
-            gifts.forEach(g => scene.remove(g));
-            gifts = [];
-
-            const geometry = new THREE.BufferGeometry();
-            const positions = new Float32Array(PARTICLE_COUNT * 3);
-            const colors = new Float32Array(PARTICLE_COUNT * 3);
-            const initialPositions = new Float32Array(PARTICLE_COUNT * 3);
-
-            const colorHelper = new THREE.Color();
-            const TRUNK_COLORS = [0x5C3317, 0x6F4E37, 0x8B4513];
-            const LEAF_COLORS = [0x2E8B57, 0x3CB371, 0x20B2AA, 0x66CDAA, 0x00FA9A];
-            const LIGHT_COLORS = [0xFF6B9D, 0xFFD166, 0x7CE6E6, 0xFF8AF0, 0xFFA552];
-
-            let idx = 0;
-            const treeScale = 1.5; // Adjust for 3D scale
-
-            // 1. Trunk
-            const trunkCount = 800;
-            for (let i = 0; i < trunkCount && idx < PARTICLE_COUNT; i++) {
-                const p = i / trunkCount;
-                const h = 140 * treeScale;
-                const r = 50 * treeScale * (1 - 0.2 * p) * Math.sqrt(Math.random());
-                const angle = i * 2.4;
-                const y = -100 + p * h; // Base Y offset
-                const x = Math.cos(angle) * r;
-                const z = Math.sin(angle) * r;
-
-                setParticle(idx, x, y, z, TRUNK_COLORS[i % 3]);
-                idx++;
-            }
-
-            // 2. Crown
-            const crownCount = 3500;
-            for (let i = 0; i < crownCount && idx < PARTICLE_COUNT; i++) {
-                const p = i / crownCount;
-                const h = 620 * treeScale * p;
-                const r = 280 * treeScale * (1 - p) * Math.sqrt(Math.random());
-                const angle = i * 2.4 + p * 10;
-                const x = Math.cos(angle) * r;
-                const z = Math.sin(angle) * r;
-                const y = -100 + 140 * treeScale * 0.8 + (620 * treeScale - h) - 300; // Adjust Y to center
-
-                const isLight = Math.random() < 0.15;
-                const col = isLight ? LIGHT_COLORS[Math.floor(Math.random() * LIGHT_COLORS.length)] : LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)];
-
-                setParticle(idx, x, y, z, col);
-                idx++;
-            }
-
-            // Fill rest
-            while (idx < PARTICLE_COUNT) {
-                setParticle(idx, 0, -1000, 0, 0x000000); // Hide unused
-                idx++;
-            }
-
-            function setParticle(i, x, y, z, hex) {
-                positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
-                initialPositions[i * 3] = x; initialPositions[i * 3 + 1] = y; initialPositions[i * 3 + 2] = z;
-                colorHelper.setHex(hex);
-                colors[i * 3] = colorHelper.r; colors[i * 3 + 1] = colorHelper.g; colors[i * 3 + 2] = colorHelper.b;
-            }
-
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            geometry.setAttribute('initialPosition', new THREE.BufferAttribute(initialPositions, 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-            const material = new THREE.PointsMaterial({
-                size: 4,
-                vertexColors: true,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-                transparent: true,
-                opacity: 0.9,
-                map: createCircleTexture()
-            });
-
-            particleSystem = new THREE.Points(geometry, material);
-            scene.add(particleSystem);
-
-            // Create 3D Gifts (Meshes)
-            createGifts(treeScale);
-        }
-
-        async function resetToTree() {
-            createTreeParticles();
-        }
-
-        function createGifts(scale) {
-            const GIFT_COLORS = [0xFF6B6B, 0x4ECDC4, 0x95E1D3, 0xFF8AF0];
-            // Simple random placement on tree surface
-            for (let i = 0; i < 15; i++) {
-                const hRatio = 0.2 + Math.random() * 0.6;
-                const h = 620 * scale * hRatio;
-                // Cone radius at height h
-                const maxR = 280 * scale * (1 - hRatio);
-                const r = maxR * 0.9;
-                const angle = Math.random() * Math.PI * 2;
-
-                const x = Math.cos(angle) * r;
-                const z = Math.sin(angle) * r;
-                const y = -100 + 140 * scale * 0.8 + (620 * scale - h) - 300;
-
-                const geo = new THREE.BoxGeometry(20, 20, 20);
-                const mat = new THREE.MeshPhongMaterial({
-                    color: GIFT_COLORS[i % GIFT_COLORS.length],
-                    emissive: 0x222222
-                });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(x, y, z);
-                mesh.rotation.y = Math.random();
-
-                scene.add(mesh);
-                gifts.push(mesh);
-            }
-        }
-
-        function handleImageUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                const img = new Image();
-                img.onload = function () {
-                    updateParticlesFromImage(img);
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function updateParticlesFromImage(img) {
-            // Remove gifts in image mode
-            gifts.forEach(g => scene.remove(g));
-            gifts = [];
-
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            // Scale image to fit particle count approx
-            const aspect = img.width / img.height;
-            const targetHeight = 100; // Resolution
-            const targetWidth = Math.round(targetHeight * aspect);
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
-            ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-
-            const data = ctx.getImageData(0, 0, targetWidth, targetHeight).data;
-            const positions = particleSystem.geometry.attributes.position.array;
-            const colors = particleSystem.geometry.attributes.color.array;
-            const initialPositions = particleSystem.geometry.attributes.initialPosition.array;
-
-            let pIdx = 0;
-            const colorHelper = new THREE.Color();
-
-            for (let y = 0; y < targetHeight; y++) {
-                for (let x = 0; x < targetWidth; x++) {
-                    if (pIdx >= PARTICLE_COUNT) break;
-
-                    const i = (y * targetWidth + x) * 4;
-                    const r = data[i];
-                    const g = data[i + 1];
-                    const b = data[i + 2];
-                    const a = data[i + 3];
-
-                    if (a > 128) {
-                        // Map to 3D space
-                        const px = (x - targetWidth / 2) * 4;
-                        const py = -(y - targetHeight / 2) * 4;
-                        const pz = 0;
-
-                        // Set Target (we will animate to this in loop? No, simplified: just set)
-                        // Better: Interpolate? For now, snap to position to "restore original way"
-                        positions[pIdx * 3] = px;
-                        positions[pIdx * 3 + 1] = py;
-                        positions[pIdx * 3 + 2] = pz;
-
-                        initialPositions[pIdx * 3] = px;
-                        initialPositions[pIdx * 3 + 1] = py;
-                        initialPositions[pIdx * 3 + 2] = pz;
-
-                        colorHelper.setRGB(r / 255, g / 255, b / 255);
-                        colors[pIdx * 3] = colorHelper.r;
-                        colors[pIdx * 3 + 1] = colorHelper.g;
-                        colors[pIdx * 3 + 2] = colorHelper.b;
-
-                        pIdx++;
-                    }
-                }
-            }
-
-            // Hide remaining
-            while (pIdx < PARTICLE_COUNT) {
-                positions[pIdx * 3 + 1] = -5000;
-                pIdx++;
-            }
-
-            particleSystem.geometry.attributes.position.needsUpdate = true;
-            particleSystem.geometry.attributes.color.needsUpdate = true;
-            particleSystem.geometry.attributes.initialPosition.needsUpdate = true;
-
-            // Reset Camera
-            controls.autoRotate = false;
-            camera.position.set(0, 0, 600);
-            camera.lookAt(0, 0, 0);
-        }
-
-        // --- Utils ---
-        function createCircleTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32; canvas.height = 32;
-            const context = canvas.getContext('2d');
-            const grad = context.createRadialGradient(16, 16, 0, 16, 16, 16);
-            grad.addColorStop(0, 'rgba(255,255,255,1)');
-            grad.addColorStop(1, 'rgba(255,255,255,0)');
-            context.fillStyle = grad;
-            context.fillRect(0, 0, 32, 32);
-            const texture = new THREE.Texture(canvas);
-            texture.needsUpdate = true;
-            return texture;
-        }
-
-        function onMouseClick(event) {
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            checkIntersection();
-        }
-        function onTouchStart(event) {
-            if (event.touches.length > 0) {
-                mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
-                mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
-                checkIntersection();
-            }
-        }
-        function checkIntersection() {
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(gifts);
-            if (intersects.length > 0) {
-                // Show Photo
-                document.getElementById('photoContent').src = "https://images.unsplash.com/photo-1543589077-47d81606c1bf?q=80&w=600"; // Sample
-                document.getElementById('photoModal').style.display = 'flex';
-            }
-        }
-
-        // --- Animation Loop ---
-        function animate() {
-            requestAnimationFrame(animate);
-
-            const time = Date.now() * 0.001;
-            controls.update();
-
-            // Gesture Logic
-            // Explosion Factor
-            if (particleMode === 'explode') explosionFactor += (1 - explosionFactor) * 0.05;
-            else if (particleMode === 'gather') explosionFactor += (0 - explosionFactor) * 0.1;
-            else explosionFactor += (0 - explosionFactor) * 0.02;
-
-            if (particleSystem) {
-                const positions = particleSystem.geometry.attributes.position.array;
-                const initials = particleSystem.geometry.attributes.initialPosition.array;
-                const count = particleSystem.geometry.attributes.position.count;
-
-                for (let i = 0; i < count; i++) {
-                    const i3 = i * 3;
-                    const ix = initials[i3];
-                    const iy = initials[i3 + 1];
-                    const iz = initials[i3 + 2];
-
-                    if (iy < -2000) continue; // Hidden
-
-                    // Base Sway
-                    let tx = ix; let ty = iy; let tz = iz;
-
-                    // Add Sway (Simulate tree wind)
-                    if (Math.abs(ix) > 10) { // Keep trunk mostly still
-                        tx += Math.sin(time + iy * 0.01) * 2;
-                        tz += Math.cos(time + iy * 0.01) * 2;
-                    }
-
-                    // Apply Explosion
-                    if (explosionFactor > 0.01) {
-                        const dist = Math.sqrt(ix * ix + iy * iy + iz * iz) || 1;
-                        const blast = explosionFactor * 400; // Radius
-                        tx += (ix / dist) * blast + (Math.random() - 0.5) * 20;
-                        ty += (iy / dist) * blast + (Math.random() - 0.5) * 20;
-                        tz += (iz / dist) * blast + (Math.random() - 0.5) * 20;
-                    }
-
-                    positions[i3] = tx;
-                    positions[i3 + 1] = ty;
-                    positions[i3 + 2] = tz;
-                }
-                particleSystem.geometry.attributes.position.needsUpdate = true;
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        // --- MediaPipe Boilerplate (Restored) ---
-        window.initMediaPipe = async function () {
-            const btn = document.getElementById('btn-camera');
-            btn.innerText = "⏳ Doing Magic...";
+        window.APP = window.APP || {};
+        window.APP.initCamera = async () => {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block'; loading.innerText = "正在启动魔法眼...";
             try {
                 const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm");
-
-                let success = false;
-                try {
-                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { modelAssetPath: `./hand_landmarker.task`, delegate: "GPU" },
-                        runningMode: "VIDEO", numHands: 1
-                    });
-                    success = true;
-                } catch (e) { }
-
-                if (!success) {
-                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
-                        runningMode: "VIDEO", numHands: 1
-                    });
-                }
+                handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" },
+                    runningMode: "VIDEO", numHands: 1
+                });
 
                 const video = document.getElementById('webcam');
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: 'user' } });
                 video.srcObject = stream;
-                video.addEventListener("loadeddata", predictWebcam);
-                webcamRunning = true;
-                video.style.visibility = 'visible';
-                document.getElementById('hand-cursor').style.display = 'block';
-                btn.innerText = "🛑 Stop";
-                btn.onclick = () => location.reload();
-
-            } catch (e) { alert("Error: " + e.message); }
+                video.addEventListener("loadeddata", () => {
+                    running = true; predictWebcam();
+                    video.style.display = 'block'; document.getElementById('hand-cursor').style.display = 'block';
+                    loading.style.display = 'none';
+                });
+            } catch (e) { console.error(e); alert("Camera Error: " + e); loading.style.display = 'none'; }
         };
 
+        window.APP.handleUpload = (input) => {
+            if (window.christmasAnimation) window.christmasAnimation.addPhotos(input.files);
+        }
+
+        let lastVideoTime = -1;
         async function predictWebcam() {
+            if (!running) return;
             const video = document.getElementById('webcam');
-            const cursor = document.getElementById('hand-cursor');
-            if (webcamRunning) {
-                let startTimeMs = performance.now();
-                if (lastVideoTime !== video.currentTime && video.readyState >= 2) {
-                    lastVideoTime = video.currentTime;
-                    const results = handLandmarker.detectForVideo(video, startTimeMs);
-                    if (results.landmarks && results.landmarks.length > 0) {
-                        const landmarks = results.landmarks[0];
-                        const x = 1 - landmarks[8].x;
-                        const y = landmarks[8].y;
-                        cursor.style.left = x * 100 + '%'; cursor.style.top = y * 100 + '%';
+            const h = window.HAND_STATE;
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const results = handLandmarker.detectForVideo(video, performance.now());
+                if (results.landmarks && results.landmarks.length > 0) {
+                    const lm = results.landmarks[0];
+                    h.active = true;
+                    const wrist = lm[0];
+                    const tips = [8, 12, 16, 20]; const pips = [6, 10, 14, 18];
+                    let ext = 0;
+                    tips.forEach((t, i) => { if (Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > Math.hypot(lm[pips[i]].x - wrist.x, lm[pips[i]].y - wrist.y)) ext++; });
 
-                        // Gesture: Ratio
-                        const wrist = landmarks[0];
-                        const mcp = landmarks[9];
-                        const scale = Math.sqrt(Math.pow(mcp.x - wrist.x, 2) + Math.pow(mcp.y - wrist.y, 2));
-                        const tips = [8, 12, 16, 20].map(i => landmarks[i]);
-                        const avgTipDist = tips.reduce((sum, t) => sum + Math.sqrt(Math.pow(t.x - wrist.x, 2) + Math.pow(t.y - wrist.y, 2)), 0) / 4;
-                        const ratio = avgTipDist / scale;
+                    if (ext === 4) h.gesture = 'OPEN_PALM';
+                    else if (ext === 0) h.gesture = 'FIST';
+                    else h.gesture = 'POINT';
 
-                        if (ratio < 1.1) { particleMode = 'gather'; cursor.style.borderColor = 'yellow'; }
-                        else if (ratio > 1.7) { particleMode = 'explode'; cursor.style.borderColor = 'magenta'; }
-                        else { particleMode = 'idle'; cursor.style.borderColor = 'cyan'; }
-                    } else { particleMode = 'idle'; }
+                    h.x = (1 - lm[8].x) * 100; h.y = lm[8].y * 100;
+                    const cur = document.getElementById('hand-cursor');
+                    cur.style.left = h.x + '%'; cur.style.top = h.y + '%';
+
+                    const d = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
+                    const wasPinching = h.pinching;
+                    h.pinching = d < 0.06;
+
+                    if (h.pinching) cur.classList.add('pinching'); else cur.classList.remove('pinching');
+                    if (!wasPinching && h.pinching && window.christmasAnimation) window.christmasAnimation.handleHandClick(h.x, h.y);
+                    cur.style.borderColor = (h.gesture === 'OPEN_PALM' ? 'magenta' : (h.gesture === 'FIST' ? 'yellow' : 'cyan'));
+                } else { h.active = false; h.gesture = 'IDLE'; }
+            }
+            requestAnimationFrame(predictWebcam);
+        }
+    </script>
+
+    <script>
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        class ChristmasAnimation {
+            constructor() {
+                this.canvas = document.getElementById('christmasCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.loading = document.getElementById('loading');
+
+                this.photos = [];
+                this.explosionFactor = 0;
+
+                this.isMobileDevice = isMobile;
+                this.performanceMultiplier = isMobile ? 0.7 : 1;
+
+                this.autoRotation = 0;
+                this.rotationSpeed = 0.005;
+                this.growthProgress = 0; this.maxGrowth = 1;
+
+                this.setupCanvas();
+                this.initColors();
+                this.createScene();
+                this.startAnimation();
+
+                window.addEventListener('resize', () => this.handleResize());
+                this.canvas.addEventListener('click', e => this.handleClick(e.clientX, e.clientY));
+            }
+
+            setupCanvas() {
+                this.dpr = Math.min(window.devicePixelRatio || 1, 3); // High DPI
+                this.screenWidth = window.innerWidth; this.screenHeight = window.innerHeight;
+                this.canvas.width = this.screenWidth * this.dpr; this.canvas.height = this.screenHeight * this.dpr;
+                this.ctx.scale(this.dpr, this.dpr);
+                this.centerX = this.screenWidth / 2; this.centerY = this.screenHeight / 2;
+
+                const baseSize = Math.min(this.screenWidth, this.screenHeight);
+                this.treeScale = baseSize / 850;
+                if (this.screenHeight > this.screenWidth * 1.5) this.treeScale *= 0.9;
+
+                this.trunkBaseY = this.screenHeight * 0.7;
+                this.crownBaseY = this.screenHeight * 0.82;
+            }
+
+            handleResize() { this.setupCanvas(); this.createScene(); }
+
+            initColors() {
+                this.TREE_COLORS = ["#2E8B57", "#3CB371", "#20B2AA", "#66CDAA", "#00FA9A"];
+                this.LIGHT_COLORS = ["#FF6B9D", "#FFD166", "#7CE6E6", "#FF8AF0", "#FFA552", "#93FF9B"];
+                this.TRUNK_COLORS = ["#5C3317", "#6F4E37", "#8B4513"];
+                this.GIFT_COLORS = [
+                    { box: "#FF6B6B", ribbon: "#FFD166" }, { box: "#4ECDC4", ribbon: "#FFE66D" },
+                    { box: "#95E1D3", ribbon: "#F38181" }, { box: "#FF8AF0", ribbon: "#7CE6E6" },
+                    { box: "#FFD166", ribbon: "#FF6B9D" }, { box: "#A8E6CF", ribbon: "#FFAAA5" },
+                    { box: "#FFD3B6", ribbon: "#A8E6CF" }, { box: "#D4A5A5", ribbon: "#FFE8E8" },
+                ];
+                this.SPIRAL_LIGHT_COLORS = ["#FF6B9D", "#FFD166", "#7CE6E6", "#FF8AF0", "#4ECDC4", "#95E1D3", "#A8E6CF", "#FFD3B6"];
+            }
+
+            createScene() {
+                this.particles = []; this.lights = []; this.snowflakes = []; this.stars = []; this.topStar = null;
+                this.gifts = []; this.upperGifts = []; this.topGifts = []; this.spiralLights = [];
+
+                this.createChristmasTreeTrunk();
+                this.createChristmasTreeCrown();
+                this.createSnowflakes();
+                this.createTopStar();
+                this.createTopGifts();
+                this.createUpperGifts();
+                this.createGifts();
+                this.createSpiralLights();
+                if (this.loading) this.loading.style.display = 'none';
+            }
+
+            // --- High Fidelity Methods ---
+            createChristmasTreeTrunk(multiplier = 1) {
+                const trunkHeight = 140 * this.treeScale;
+                const trunkRadius = 50 * this.treeScale;
+                const trunkCount = 1000;
+                for (let i = 0; i < trunkCount; i++) {
+                    const p = i / trunkCount;
+                    const y = this.trunkBaseY + p * trunkHeight;
+                    const angle = i * 2.39996;
+                    const currentRadius = trunkRadius * (1 - 0.2 * p);
+                    const r = currentRadius * Math.sqrt(Math.random()) * (0.5 + Math.random() * 0.5);
+                    const x = Math.cos(angle) * r; const z = Math.sin(angle) * r;
+                    this.particles.push({
+                        x: x, y: y, z: z, baseX: x, baseY: y, color: this.TRUNK_COLORS[i % 3],
+                        size: Math.random() * 3.5 + 3, swaySpeed: 0, swayOffset: 0, isTrunk: true, growth: 1
+                    });
                 }
-                requestAnimationFrame(predictWebcam);
+            }
+
+            createChristmasTreeCrown(multiplier = 1) {
+                const particleCount = 3500;
+                const treeHeight = 620 * this.treeScale;
+                const maxRadius = 280 * this.treeScale;
+                const spiralFactor = 10;
+                for (let i = 0; i < particleCount; i++) {
+                    const p = i / particleCount;
+                    const spiralAngle = i * 2.39996 + p * spiralFactor;
+                    const currentHeight = treeHeight * p;
+                    const currentRadius = maxRadius * (1 - p);
+                    const r = currentRadius * Math.sqrt(Math.random()) * (0.8 + Math.random() * 0.4);
+                    const x = Math.cos(spiralAngle) * r;
+                    const y = this.crownBaseY - currentHeight;
+                    const z = Math.sin(spiralAngle) * r;
+                    if (Math.random() < 0.18) {
+                        const color = this.LIGHT_COLORS[Math.floor(Math.random() * this.LIGHT_COLORS.length)];
+                        this.lights.push({
+                            x: x, y: y, z: z, baseX: x, baseY: y,
+                            color: color, size: Math.random() * 3.5 + 2.5,
+                            blinkSpeed: 1.0 + Math.random() * 3.5, blinkOffset: Math.random() * Math.PI * 2,
+                            baseAlpha: 0.5 + Math.random() * 0.6, glow: 8 + Math.random() * 24, growth: 1, spiralAngle: spiralAngle
+                        });
+                    } else {
+                        this.particles.push({
+                            x: x, y: y, z: z, baseX: x, baseY: y,
+                            color: this.TREE_COLORS[Math.floor(Math.random() * this.TREE_COLORS.length)],
+                            size: Math.random() * 1.8 + 0.6, swaySpeed: Math.random() * 2 + 1,
+                            swayOffset: Math.random() * Math.PI * 2, isTrunk: false, growth: 1, spiralAngle: spiralAngle
+                        });
+                    }
+                }
+            }
+
+            _createGifts(arr, count, hStart, hRatio, layer, spiralFactor = 8) {
+                const treeHeight = 620 * this.treeScale;
+                const maxRadius = 280 * this.treeScale;
+                for (let i = 0; i < count; i++) {
+                    const hr = hStart + Math.random() * hRatio;
+                    const currentHeight = treeHeight * hr;
+                    const y = this.crownBaseY - currentHeight;
+                    const radiusRatio = 0.5 + Math.random() * 0.4;
+                    const currentRadius = maxRadius * (1 - hr) * radiusRatio;
+                    const spiralAngle = i * (Math.PI * 2 / count) + hr * spiralFactor;
+                    const x = Math.cos(spiralAngle) * currentRadius; const z = Math.sin(spiralAngle) * currentRadius;
+                    const colIdx = Math.floor(Math.random() * this.GIFT_COLORS.length);
+                    arr.push({
+                        x: x, y: y, z: z, baseX: x, baseY: y,
+                        color: this.GIFT_COLORS[colIdx].box, ribbonColor: this.GIFT_COLORS[colIdx].ribbon,
+                        size: (0.75 + Math.random() * 0.75) * this.treeScale * 30,
+                        rotation: Math.random() * Math.PI * 2, rotationSpeed: (Math.random() - 0.5) * 0.01,
+                        swaySpeed: 0.5 + Math.random(), swayOffset: Math.random() * Math.PI * 2,
+                        growth: 1, spiralAngle: spiralAngle, layer: layer, sparkleTimer: 0, glow: 0, sparkleIntensity: 0.5
+                    });
+                }
+            }
+            createTopGifts() { this._createGifts(this.topGifts, 5, 0.05, 0.08, 'top', 12); }
+            createUpperGifts() { this._createGifts(this.upperGifts, 8, 0.15, 0.2, 'upper', 8); }
+            createGifts() { this._createGifts(this.gifts, 8, 0.3, 0.2, 'middle', 8); }
+
+            createSpiralLights() {
+                const treeHeight = 620 * this.treeScale; const maxRadius = 280 * this.treeScale;
+                const spiralCount = 100; const spiralTurns = 5;
+                for (let i = 0; i < spiralCount; i++) {
+                    const t = i / spiralCount;
+                    const y = this.crownBaseY - treeHeight * t;
+                    const angle = t * Math.PI * 2 * spiralTurns + t * 10;
+                    const r = maxRadius * (1 - t * 0.8) * (0.7 + Math.random() * 0.3);
+                    this.spiralLights.push({
+                        x: 0, y: y, z: 0, baseX: Math.cos(angle) * r, baseY: y, z: Math.sin(angle) * r,
+                        color: this.SPIRAL_LIGHT_COLORS[i % this.SPIRAL_LIGHT_COLORS.length],
+                        size: 1.8 + Math.random() * 1.8, pulseSpeed: 2 + Math.random() * 2, phase: Math.random() * Math.PI * 2,
+                        baseAlpha: 0.6 + Math.random() * 0.4, glow: 10 + Math.random() * 20, trailLength: 5, trailOffset: 0, growth: 1, spiralAngle: angle
+                    });
+                }
+            }
+
+            createSnowflakes() {
+                for (let i = 0; i < 300; i++) {
+                    this.snowflakes.push({
+                        x: Math.random() * this.screenWidth, y: Math.random() * this.screenHeight, z: Math.random() * 2 + 0.5,
+                        size: Math.random() * 4 + 3, baseSize: Math.random() * 4 + 3,
+                        speedY: Math.random() * 1 + 0.5, swayAmp: Math.random() * 2, opacity: Math.random() * 0.6 + 0.3
+                    });
+                }
+            }
+            createTopStar() {
+                const treeHeight = 620 * this.treeScale;
+                this.topStar = { x: this.centerX, y: this.crownBaseY - treeHeight - 30, size: 30 * this.treeScale, color: '#FFD700', rotation: 0, rotationSpeed: 0.01, spikes: 5, innerRadius: 0.4, glowSize: 48 * this.treeScale };
+            }
+
+            addPhotos(files) {
+                if (!files.length) return;
+                Array.from(files).forEach(f => {
+                    const r = new FileReader();
+                    r.onload = e => { const i = new Image(); i.src = e.target.result; this.photos.push(i); this.assignPhotos(); };
+                    r.readAsDataURL(f);
+                });
+                alert("Nice! Now open your hand to see the gallery!");
+            }
+            assignPhotos() {
+                const all = [...this.gifts, ...this.upperGifts, ...this.topGifts];
+                all.forEach((g, i) => { if (this.photos.length) g.photo = this.photos[i % this.photos.length]; });
+            }
+
+            handleClick(cx, cy) {
+                const check = (list) => {
+                    for (let g of list) {
+                        const dx = cx - (g.lastDrawX || -999);
+                        const dy = cy - (g.lastDrawY || -999);
+                        if (Math.hypot(dx, dy) < g.size * 2) {
+                            const m = document.getElementById('photoModal');
+                            const c = document.getElementById('photoContent');
+                            c.src = g.photo ? g.photo.src : '';
+                            if (g.photo) m.style.display = 'flex';
+                            return true;
+                        }
+                    }
+                };
+                check(this.gifts) || check(this.upperGifts) || check(this.topGifts);
+            }
+            handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
+
+            update() {
+                if (window.HAND_STATE) {
+                    if (window.HAND_STATE.gesture === 'OPEN_PALM') this.explosionFactor += (1 - this.explosionFactor) * 0.05;
+                    else if (window.HAND_STATE.gesture === 'FIST') this.explosionFactor += (0 - this.explosionFactor) * 0.05;
+                }
+                const time = Date.now() / 1000;
+                this.autoRotation += this.rotationSpeed;
+                if (this.growthProgress < this.maxGrowth) this.growthProgress += 0.001;
+
+                this.particles.forEach(p => {
+                    const rot = this.autoRotation;
+                    const cos = Math.cos(rot), sin = Math.sin(rot);
+                    const gf = Math.min(1, p.growth + this.growthProgress);
+
+                    let ex = 0, ey = 0;
+                    if (this.explosionFactor > 0.01 && !p.isTrunk) {
+                        const d = Math.hypot(p.baseX, p.baseY - this.crownBaseY, p.z) || 1;
+                        const m = this.explosionFactor * (this.screenWidth * 2);
+                        ex = (p.baseX / d) * m; ey = ((p.baseY - this.crownBaseY) / d) * m;
+                    }
+
+                    p.x = (p.baseX * cos - p.z * sin) * gf + this.centerX + ex;
+                    if (!p.isTrunk) {
+                        const sway = Math.sin(time * 0.5 + p.spiralAngle) * 2;
+                        p.y = p.baseY + Math.sin(time * p.swaySpeed + p.swayOffset) * 2 * gf + sway + ey;
+                    } else {
+                        p.y = p.baseY * gf;
+                    }
+                });
+
+                this.spiralLights.forEach(light => {
+                    const rot = this.autoRotation;
+                    const cos = Math.cos(rot), sin = Math.sin(rot);
+                    const gf = Math.min(1, light.growth + this.growthProgress);
+                    let ex = 0, ey = 0;
+                    if (this.explosionFactor > 0.01) {
+                        const d = Math.hypot(light.baseX, light.baseY - this.crownBaseY, light.z) || 1;
+                        const m = this.explosionFactor * (this.screenWidth * 2);
+                        ex = (light.baseX / d) * m; ey = ((light.baseY - this.crownBaseY) / d) * m;
+                    }
+                    light.x = (light.baseX * cos - light.z * sin) * gf + this.centerX + ex;
+                    light.y = light.baseY * gf + ey;
+
+                    const sinPart = (Math.sin(time * light.pulseSpeed + light.phase + light.spiralAngle) + 1) / 2;
+                    light.alpha = Math.min(1, light.baseAlpha * (0.7 + 0.6 * sinPart));
+                    light.trailOffset = (light.trailOffset + 1) % (light.trailLength + 1);
+                });
+
+                const updateGift = (g) => {
+                    const rot = this.autoRotation;
+                    const cos = Math.cos(rot), sin = Math.sin(rot);
+                    const gf = Math.min(1, g.growth + this.growthProgress);
+
+                    let rx = g.baseX * cos - g.z * sin;
+                    let rz = g.z * cos + g.baseX * sin;
+                    let ry = g.baseY * gf + Math.sin(time * g.swaySpeed) * 2;
+                    g.rotation += g.rotationSpeed + 0.002;
+
+                    if (this.explosionFactor > 0.01) {
+                        const ang = Math.atan2(g.z, g.baseX) + rot + Math.PI / 2;
+                        const rad = Math.min(this.screenWidth, this.screenHeight) * 0.35 + (g.layer === 'top' ? 0 : (g.layer === 'upper' ? 50 : 100));
+                        const tx = Math.cos(ang) * rad;
+                        const ty = Math.sin(ang) * rad + this.centerY;
+                        g.calcX = rx + (tx - rx) * this.explosionFactor + this.centerX;
+                        g.calcY = ry + (ty - ry) * this.explosionFactor;
+                        g.calcScale = 1 + (rz / 1000) * (1 - this.explosionFactor) + 0.5 * this.explosionFactor;
+                    } else {
+                        g.calcX = rx + this.centerX; g.calcY = ry; g.calcScale = 1 + rz / 1000;
+                    }
+                    g.lastDrawX = g.calcX; g.lastDrawY = g.calcY;
+                    if (g.sparkleTimer > 0) g.sparkleTimer--;
+                };
+                [...this.gifts, ...this.upperGifts, ...this.topGifts].forEach(updateGift);
+
+                this.lights.forEach(l => {
+                    const rot = this.autoRotation;
+                    const cos = Math.cos(rot), sin = Math.sin(rot);
+                    const gf = Math.min(1, l.growth + this.growthProgress);
+                    let ex = 0, ey = 0;
+                    if (this.explosionFactor > 0.01) {
+                        const d = Math.hypot(l.baseX, l.baseY - this.crownBaseY, l.z) || 1;
+                        const m = this.explosionFactor * (this.screenWidth * 2);
+                        ex = (l.baseX / d) * m; ey = ((l.baseY - this.crownBaseY) / d) * m;
+                    }
+                    l.x = (l.baseX * cos - l.z * sin) * gf + this.centerX + ex;
+                    l.y = l.baseY * gf + ey;
+                    const sinPart = (Math.sin(time * l.blinkSpeed + l.blinkOffset) + 1) / 2;
+                    l.alpha = Math.min(1, l.baseAlpha * (0.6 + 0.8 * sinPart));
+                });
+
+                this.snowflakes.forEach(s => {
+                    s.y += s.speedY * s.z; s.x += Math.sin(time + s.y * 0.01) * s.swayAmp;
+                    if (s.y > this.screenHeight) s.y = -10;
+                });
+
+                if (this.topStar) {
+                    this.topStar.time = time; this.topStar.rotation += this.topStar.rotationSpeed;
+                }
+            }
+
+            draw() {
+                this.ctx.fillStyle = "#0a0a2a";
+                this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
+                this.ctx.globalCompositeOperation = 'lighter';
+                const gf = this.explosionFactor > 0.9 ? 0 : 1 - this.explosionFactor;
+
+                if (gf > 0.01) {
+                    this.particles.forEach(p => {
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.x, p.y, p.size * this.treeScale * (p.isTrunk ? 1.5 : 1), 0, Math.PI * 2);
+                        this.ctx.fillStyle = p.color;
+                        this.ctx.globalAlpha = (p.isTrunk ? 0.9 : 0.6) * gf;
+                        this.ctx.fill();
+                    });
+                    this.spiralLights.forEach(l => {
+                        this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
+                    });
+                    this.lights.forEach(l => {
+                        this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
+                    });
+                }
+
+                this.ctx.globalAlpha = 1;
+                const drawAGift = (g) => {
+                    this.ctx.save();
+                    this.ctx.translate(g.calcX, g.calcY);
+
+                    if (window.HAND_STATE && window.HAND_STATE.active) {
+                        const hx = window.HAND_STATE.x / 100 * this.screenWidth;
+                        const hy = window.HAND_STATE.y / 100 * this.screenHeight;
+                        if (Math.hypot(g.calcX - hx, g.calcY - hy) < g.size * 2) {
+                            this.ctx.shadowColor = "white"; this.ctx.shadowBlur = 20;
+                        }
+                    }
+
+                    if (this.explosionFactor > 0.5 && g.photo) {
+                        const sz = g.size * g.calcScale * 2.5;
+                        const r = g.photo.width / g.photo.height;
+                        this.ctx.beginPath();
+                        this.ctx.fillStyle = "#fff"; this.ctx.fillRect(-sz * r / 2 - 2, -sz / 2 - 2, sz * r + 4, sz + 4);
+                        this.ctx.drawImage(g.photo, -sz * r / 2, -sz / 2, sz * r, sz);
+                    } else {
+                        // Original High Accuracy Gift Draw
+                        if (g.glow > 0) {
+                            const glowGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, g.size * g.calcScale * 2);
+                            glowGradient.addColorStop(0, this.hexToRgba(g.color, g.glow * 0.3));
+                            glowGradient.addColorStop(1, this.hexToRgba(g.color, 0));
+                            this.ctx.fillStyle = glowGradient; this.ctx.beginPath(); this.ctx.arc(0, 0, g.size * g.calcScale * 2, 0, Math.PI * 2); this.ctx.fill();
+                        }
+                        this.drawGift(0, 0, g.size * g.calcScale, g.rotation, g.color, g.ribbonColor, g.glow, (g.sparkleTimer > 0 ? g.sparkleIntensity : 0));
+                    }
+                    this.ctx.restore();
+                };
+                [...this.topGifts, ...this.upperGifts, ...this.gifts].forEach(drawAGift);
+
+                if (this.topStar && gf > 0.01) {
+                    const s = this.topStar;
+                    this.ctx.globalCompositeOperation = 'lighter';
+                    const g = this.ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.glowSize);
+                    g.addColorStop(0, 'rgba(255,255,200,0.9)'); g.addColorStop(1, 'rgba(255,140,0,0)');
+                    this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.glowSize, 0, Math.PI * 2); this.ctx.fill();
+
+                    this.drawStar(s.x, s.y, s.spikes, s.size, s.size * s.innerRadius, s.color, s.rotation);
+                    this.drawStar(s.x, s.y, s.spikes, s.size * 0.7, s.size * 0.7 * s.innerRadius, '#FFFACD', s.rotation + 0.1);
+                    this.ctx.globalCompositeOperation = 'source-over';
+                }
+
+                this.ctx.globalAlpha = 1;
+                this.snowflakes.forEach(s => {
+                    this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.size * 0.5, 0, Math.PI * 2);
+                    this.ctx.fillStyle = `rgba(255,255,255,${s.opacity})`; this.ctx.fill();
+                });
+
+                requestAnimationFrame(() => this.draw());
+            }
+
+            drawGift(x, y, size, rotation, boxColor, ribbonColor, glow = 0, sparkle = 0) {
+                const ctx = this.ctx;
+                ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+                ctx.fillStyle = boxColor; ctx.fillRect(-size / 2, -size / 2, size, size);
+                ctx.fillStyle = this.hexToRgba('#FFFFFF', 0.15);
+                ctx.fillRect(-size / 2, -size / 2, size * 0.8, size * 0.12); ctx.fillRect(-size / 2, -size / 2, size * 0.12, size * 0.8);
+                ctx.fillStyle = ribbonColor;
+                ctx.fillRect(-size / 2, -size / 6, size, size / 3); ctx.fillRect(-size / 6, -size / 2, size / 3, size);
+                ctx.beginPath(); ctx.arc(0, 0, size / 4, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = this.hexToRgba('#FFFFFF', 0.3);
+                ctx.beginPath();
+                ctx.arc(-size / 8, -size / 8, size / 8, 0, Math.PI * 2); ctx.arc(size / 8, -size / 8, size / 8, 0, Math.PI * 2);
+                ctx.arc(-size / 8, size / 8, size / 8, 0, Math.PI * 2); ctx.arc(size / 8, size / 8, size / 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (sparkle > 0) {
+                    ctx.globalCompositeOperation = 'lighter';
+                    ctx.fillStyle = `rgba(255, 255, 255, ${sparkle})`; ctx.beginPath(); ctx.arc(0, 0, size * 0.8, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+                ctx.restore();
+            }
+
+            drawStar(x, y, spikes, outerRadius, innerRadius, color, rotation = 0) {
+                const ctx = this.ctx;
+                ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+                ctx.beginPath();
+                for (let i = 0; i < spikes; i++) {
+                    let angle = (i * Math.PI * 2) / spikes - Math.PI / 2;
+                    ctx.lineTo(Math.cos(angle) * outerRadius, Math.sin(angle) * outerRadius);
+                    angle += Math.PI / spikes;
+                    ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius);
+                }
+                ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
+            }
+
+            drawLightGlow(x, y, size, color, alpha, glow) {
+                const ctx = this.ctx;
+                const g = ctx.createRadialGradient(x, y, 0, x, y, glow);
+                g.addColorStop(0, `rgba(255,255,255,${Math.min(1, alpha * 1.2)})`);
+                g.addColorStop(0.1, this.hexToRgba(color, alpha));
+                g.addColorStop(1, this.hexToRgba(color, 0));
+                ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, glow, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = this.hexToRgba(color, Math.min(1, alpha * 1.1)); ctx.fill();
+            }
+
+            hexToRgba(hex, alpha = 1) {
+                const h = hex.replace('#', '');
+                const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+                const r = (bigint >> 16) & 255;
+                const g = (bigint >> 8) & 255;
+                const b = bigint & 255;
+                return `rgba(${r},${g},${b},${alpha})`;
             }
         }
 
-        window.resetToTree = resetToTree;
-        window.initMediaPipe = initMediaPipe;
+        window.onload = () => window.christmasAnimation = new ChristmasAnimation();
     </script>
 </body>
 
