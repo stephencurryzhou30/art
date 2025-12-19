@@ -133,13 +133,22 @@
             <p>- <b>变换物体</b>: 捏合拖动轴 (T:移, R:转, S:缩)</p>
             <p>- <b>旋转视角</b>: 对准空白处捏合拖动</p>
         </div>
-        <!-- Video element for MediaPipe -->
+        <div id="toolbar"
+            style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 1000; pointer-events: none;">
+            <button id="mode-translate" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">↔️
+                移动</button>
+            <button id="mode-rotate" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">🔄 旋转</button>
+            <button id="mode-scale" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">🔍 缩放</button>
+            <button id="mode-delete"
+                style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px; background: rgba(255, 0, 0, 0.3); border-color: rgba(255,0,0,0.5);">🗑️
+                删除</button>
+        </div>
         <video id="webcam"
-            style="position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.7;"
+            style="position: absolute; top: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.8;"
             autoplay playsinline></video>
         <!-- Custom Hand Cursor -->
         <div id="hand-cursor"
-            style="position: fixed; width: 20px; height: 20px; border: 2px solid #00ffff; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); display: none; z-index: 999; box-shadow: 0 0 10px #00ffff;">
+            style="position: fixed; width: 30px; height: 30px; border: 3px solid #00ffff; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); display: none; z-index: 9999; box-shadow: 0 0 15px #00ffff; background: rgba(0, 255, 255, 0.1);">
         </div>
     </div>
     <div id="canvas-container"></div>
@@ -181,10 +190,14 @@
 
         async function initMediaPipe() {
             const btnCamera = document.getElementById('btn-camera');
+            btnCamera.innerText = "⏳ 连接模型服务器...";
             try {
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
                 );
+
+                btnCamera.innerText = "⏳ 下载手势模型...";
+
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
@@ -195,10 +208,22 @@
                 });
                 btnCamera.innerText = "📷 开启摄像头手势";
                 btnCamera.disabled = false;
+                console.log("MediaPipe Loaded Successfully");
             } catch (error) {
                 console.error("MediaPipe Load Error:", error);
-                btnCamera.innerText = "❌ 模型加载失败";
-                alert("手势识别模型加载失败，请检查网络或控制台报错。");
+
+                let msg = "手势模型加载失败！\n";
+                if (error.message && error.message.includes("fetch")) {
+                    msg += "原因: 网络网络连接受阻 (可能无法访问 Google 服务)。\n建议: 请尝试开启 VPN 或更换网络环境。";
+                } else {
+                    msg += "原因: " + error.message;
+                }
+
+                btnCamera.innerText = "❌ 模型加载出错";
+                alert(msg);
+                btnCamera.innerText = "🔄 重试加载模型";
+                btnCamera.disabled = false;
+                btnCamera.onclick = initMediaPipe;
             }
         }
 
@@ -256,7 +281,7 @@
             document.addEventListener('mousemove', onDocumentMouseMove);
             document.addEventListener('touchmove', onDocumentTouchMove, { passive: false });
             document.addEventListener('pointerdown', onPointerDown);
-            document.addEventListener('keydown', onKeyDown);
+            // document.addEventListener('keydown', onKeyDown); // Removed, replaced by UI buttons
 
             // UI Listeners
             setupUI();
@@ -311,9 +336,28 @@
             const fileInputModel = document.getElementById('file-input-model');
             const btnCamera = document.getElementById('btn-camera');
 
+            // Mode Buttons
+            const btnTrans = document.getElementById('mode-translate');
+            const btnRot = document.getElementById('mode-rotate');
+            const btnScale = document.getElementById('mode-scale');
+            const btnDel = document.getElementById('mode-delete');
+
             btnAddImage.addEventListener('click', () => fileInputImage.click());
             btnAddModel.addEventListener('click', () => fileInputModel.click());
             btnCamera.addEventListener('click', toggleCamera);
+
+            btnTrans.addEventListener('click', () => transformControl.setMode('translate'));
+            btnRot.addEventListener('click', () => transformControl.setMode('rotate'));
+            btnScale.addEventListener('click', () => transformControl.setMode('scale'));
+            btnDel.addEventListener('click', () => {
+                if (selectedObject) {
+                    scene.remove(selectedObject);
+                    transformControl.detach();
+                    const idx = objects.indexOf(selectedObject);
+                    if (idx > -1) objects.splice(idx, 1);
+                    selectedObject = null;
+                }
+            });
 
             fileInputImage.addEventListener('change', handleImageUpload);
             fileInputModel.addEventListener('change', handleModelUpload);
@@ -401,6 +445,7 @@
                                 isPinching = true;
                                 cursor.style.borderColor = "#ff0000"; // Red when pinching
                                 cursor.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
+                                cursor.style.transform = "translate(-50%, -50%) scale(0.8)";
                                 simulateMouseEvent("mousedown", x, y);
                             } else {
                                 // Drag
@@ -411,6 +456,7 @@
                                 isPinching = false;
                                 cursor.style.borderColor = "#00ffff";
                                 cursor.style.backgroundColor = "transparent";
+                                cursor.style.transform = "translate(-50%, -50%) scale(1)";
                                 simulateMouseEvent("mouseup", x, y);
                             }
                             // Just Move
@@ -433,10 +479,11 @@
         // Simulate Pointer Events for Three.js controls (PointerEvent is preferred over MouseEvent)
         function simulateMouseEvent(type, nx, ny) {
             const canvas = renderer.domElement;
-            const rect = canvas.getBoundingClientRect();
+            const clientX = nx * window.innerWidth;
+            const clientY = ny * window.innerHeight;
 
-            const clientX = rect.left + nx * rect.width;
-            const clientY = rect.top + ny * rect.height;
+            // Determine target element under cursor (Button or Canvas)
+            const targetElement = document.elementFromPoint(clientX, clientY) || canvas;
 
             // Map mouse types to pointer types
             let pointerType = type;
@@ -457,13 +504,14 @@
                 isPrimary: true
             });
 
-            // Dispatch both for compatibility if needed, but PointerEvent is usually enough for Three.js
-            canvas.dispatchEvent(event);
+            // Dispatch to correct target (Button or Canvas)
+            targetElement.dispatchEvent(event);
 
-            // Also notify document for custom listeners if they are bound to document
-            // Our onPointerDown is on document, so we might need to dispatch there too or change listener to canvas
-            if (pointerType === 'pointerdown' || pointerType === 'pointerup') {
-                document.dispatchEvent(new PointerEvent(pointerType, event));
+            // If it's a click (mousedown then mouseup on same element), simulation is complex.
+            // But 'click' event usually generated by browser after down/up.
+            // Let's force a click on mouseup if target is a button
+            if (type === 'mouseup' && targetElement.tagName === 'BUTTON') {
+                targetElement.click();
             }
         }
 
