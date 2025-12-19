@@ -84,7 +84,7 @@
 
         #mainText {
             font-family: 'Great Vibes', cursive;
-            font-size: clamp(48px, 6vw, 72px);
+            font-size: clamp(36px, 6vw, 72px);
             font-weight: 400;
             letter-spacing: 3px;
             color: #FFD700;
@@ -352,8 +352,8 @@
                 // 2. ADAPTIVE Scaling (Fit-to-Box)
                 // We define a target safe area where the tree MUST fit.
                 // Mobile needs more safe area for browser UI elements
-                const widthFactor = this.isMobileDevice ? 0.85 : 0.9;
-                const heightFactor = this.isMobileDevice ? 0.65 : 0.75;
+                const widthFactor = this.isMobileDevice ? 0.75 : 0.9;
+                const heightFactor = this.isMobileDevice ? 0.6 : 0.75;
                 const availableW = this.screenWidth * widthFactor;
                 const availableH = this.screenHeight * heightFactor;
 
@@ -369,7 +369,7 @@
                 // Position the visual center of the tree at screen center
                 const visualTreeHeight = 650 * this.treeScale;
                 // On mobile, push it up a bit more to avoid text overlap
-                const vOffset = this.isMobileDevice ? 0.35 : 0.4;
+                const vOffset = this.isMobileDevice ? 0.32 : 0.4;
                 this.crownBaseY = this.centerY + visualTreeHeight * vOffset;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
