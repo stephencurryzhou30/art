@@ -338,24 +338,23 @@
             }
 
             setupCanvas() {
-                this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+                // FIXED: Lower DPR for mobile to prevent memory issues and excessive glow
+                this.dpr = Math.min(window.devicePixelRatio || 1, this.isMobileDevice ? 1.5 : 2);
                 this.screenWidth = window.innerWidth; this.screenHeight = window.innerHeight;
                 this.canvas.width = this.screenWidth * this.dpr; this.canvas.height = this.screenHeight * this.dpr;
                 this.ctx.scale(this.dpr, this.dpr);
                 this.centerX = this.screenWidth / 2; this.centerY = this.screenHeight / 2;
 
-                // --- FIXED MOBILE SCALE ---
-                // If portrait mode, increase scale to fill width better
                 const isPortrait = this.screenHeight > this.screenWidth;
                 if (isPortrait && this.isMobileDevice) {
-                    this.treeScale = this.screenWidth / 550; // Increased scale for mobile portrait
+                    this.treeScale = this.screenWidth / 500; // Original good scale
                 } else {
                     const baseSize = Math.min(this.screenWidth, this.screenHeight);
                     this.treeScale = baseSize / 850;
                 }
 
                 this.trunkBaseY = this.screenHeight * 0.7;
-                this.crownBaseY = this.screenHeight * 0.82; // Keep this logic for now
+                this.crownBaseY = this.screenHeight * 0.82;
             }
 
             handleResize() { this.setupCanvas(); this.createScene(); }
@@ -407,7 +406,8 @@
             }
 
             createChristmasTreeCrown(multiplier = 1) {
-                const particleCount = 3500;
+                // FIXED: Reduce count on mobile to avoid white blob
+                const particleCount = this.isMobileDevice ? 1000 : 3500;
                 const treeHeight = 620 * this.treeScale;
                 const maxRadius = 280 * this.treeScale;
                 const spiralFactor = 10;
@@ -503,7 +503,6 @@
                     r.onload = e => { const i = new Image(); i.src = e.target.result; this.photos.push(i); this.assignPhotos(); };
                     r.readAsDataURL(f);
                 });
-                // ALERT REMOVED
             }
             assignPhotos() {
                 const all = [...this.gifts, ...this.upperGifts, ...this.topGifts];
@@ -529,7 +528,6 @@
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
             update() {
-                // FIXED HAND GESTURE LOGIC: REVERT IF IDLE
                 const h = window.HAND_STATE;
                 if (h) {
                     if (h.active && h.gesture === 'OPEN_PALM') {
@@ -537,7 +535,6 @@
                     } else if (h.active && h.gesture === 'FIST') {
                         this.explosionFactor += (0 - this.explosionFactor) * 0.05;
                     } else if (!h.active || h.gesture === 'IDLE') {
-                        // REVERT TO TREE IF NO HAND DETECTED
                         this.explosionFactor += (0 - this.explosionFactor) * 0.05;
                     }
                 }
@@ -655,7 +652,8 @@
                             this.ctx.beginPath();
                             this.ctx.arc(p.x, p.y, p.size * this.treeScale * (p.isTrunk ? 1.5 : 1), 0, Math.PI * 2);
                             this.ctx.fillStyle = p.color;
-                            this.ctx.globalAlpha = (p.isTrunk ? 0.9 : 0.6) * gf;
+                            // FIXED: Reduce alpha on mobile to prevent white blob
+                            this.ctx.globalAlpha = (p.isTrunk ? 0.9 : (this.isMobileDevice ? 0.3 : 0.6)) * gf;
                             this.ctx.fill();
                         });
                         this.spiralLights.forEach(l => {
