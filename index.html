@@ -351,9 +351,11 @@
 
                 // 2. ADAPTIVE Scaling (Fit-to-Box)
                 // We define a target safe area where the tree MUST fit.
-                // 90% of Screen Width, 75% of Screen Height (to leave room for "Merry Christmas" text)
-                const availableW = this.screenWidth * 0.9;
-                const availableH = this.screenHeight * 0.75;
+                // Mobile needs more safe area for browser UI elements
+                const widthFactor = this.isMobileDevice ? 0.85 : 0.9;
+                const heightFactor = this.isMobileDevice ? 0.65 : 0.75;
+                const availableW = this.screenWidth * widthFactor;
+                const availableH = this.screenHeight * heightFactor;
 
                 // Base dimensions of the tree in its local coordinate system is roughly:
                 // Width ~ 600 units, Height ~ 700 units.
@@ -366,7 +368,9 @@
                 // 3. Vertical Centering
                 // Position the visual center of the tree at screen center
                 const visualTreeHeight = 650 * this.treeScale;
-                this.crownBaseY = this.centerY + visualTreeHeight * 0.4; // Push down slightly to center visually
+                // On mobile, push it up a bit more to avoid text overlap
+                const vOffset = this.isMobileDevice ? 0.35 : 0.4;
+                this.crownBaseY = this.centerY + visualTreeHeight * vOffset;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
@@ -535,14 +539,23 @@
 
             update() {
                 const h = window.HAND_STATE;
-                if (h) {
-                    if (h.active && h.gesture === 'OPEN_PALM') {
-                        this.explosionFactor += (1 - this.explosionFactor) * 0.05;
-                    } else if (h.active && h.gesture === 'FIST') {
-                        this.explosionFactor += (0 - this.explosionFactor) * 0.05;
-                    }
-                    // REMOVED AUTO REVERT LOGIC
+
+                // Initialize target state if not exists
+                if (typeof this.targetExplosionFactor === 'undefined') {
+                    this.targetExplosionFactor = 0;
                 }
+
+                if (h && h.active) {
+                    // Update target based on gesture, persistent
+                    if (h.gesture === 'OPEN_PALM') {
+                        this.targetExplosionFactor = 1;
+                    } else if (h.gesture === 'FIST') {
+                        this.targetExplosionFactor = 0;
+                    }
+                }
+
+                // Always interpolate towards target
+                this.explosionFactor += (this.targetExplosionFactor - this.explosionFactor) * 0.05;
 
                 const time = Date.now() / 1000;
                 this.autoRotation += this.rotationSpeed;
