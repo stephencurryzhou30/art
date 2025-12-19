@@ -490,32 +490,53 @@
                             cursor.style.backgroundColor = "transparent";
                             cursor.style.transform = "translate(-50%, -50%) scale(1)";
 
-                            // 2. Fist vs Open Hand (For Particles)
-                            // Calculate average distance of tips to wrist
-                            // Tips: 8(Index), 12(Middle), 16(Ring), 20(Pinky)
-                            // Thumb(4) is excluded as it's often close in open hand too
-                            const tips = [8, 12, 16, 20];
-                            let totalDist = 0;
+                            // 2. Fist vs Open Hand (Robust Depth-Independent Logic)
+                            // Problem: Absolute distance varies with Z-depth.
+                            // Solution: Normalize by hand size (Wrist to Middle Finger MCP - landmarks 0 to 9).
+
+                            const wrist = landmarks[0];
+                            const middleMCP = landmarks[9];
+
+                            // Calculate hand scale reference (approx palm length)
+                            const handScale = Math.sqrt(
+                                Math.pow(middleMCP.x - wrist.x, 2) +
+                                Math.pow(middleMCP.y - wrist.y, 2)
+                            );
+
+                            // Calculate average distance of finger TIPS to WRIST
+                            const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+                            let totalTipDist = 0;
                             tips.forEach(idx => {
                                 const tip = landmarks[idx];
                                 const d = Math.sqrt(
                                     Math.pow(tip.x - wrist.x, 2) +
                                     Math.pow(tip.y - wrist.y, 2)
                                 );
-                                totalDist += d;
+                                totalTipDist += d;
                             });
-                            const avgDist = totalDist / 4;
+                            const avgTipDist = totalTipDist / 4;
 
-                            // Thresholds (Normalized coords approx)
-                            // Fist: Tips close to wrist (< 0.25 usually)
-                            // Open: Tips far (> 0.4 usually)
+                            // Calculate Ratio: TipDist / HandScale
+                            // - Fist: Tips touching palm. Ratio < 1.0 (fingers curled is shorter than extended?)
+                            //   Wait. Wrist->MCP is FIXED. Wrist->Tip varies.
+                            //   Extended Index ~ 2.0 * Wrist->MCP.
+                            //   Fist Index ~ 1.0 * Wrist->MCP (folded near MCP).
+                            //   Let's approximate:
+                            //   - Open: > 1.6 x Scale
+                            //   - Fist: < 1.0 x Scale
 
-                            if (avgDist < 0.25) {
+                            const ratio = avgTipDist / handScale;
+
+                            // console.log(`Ratio: ${ratio.toFixed(2)} (Scale: ${handScale.toFixed(3)})`);
+
+                            if (ratio < 1.1) {
                                 particleMode = 'gather';
                                 cursor.style.borderColor = "#ffff00"; // Yellow for Fist
-                            } else if (avgDist > 0.4) {
+                                cursor.style.backgroundColor = "rgba(255, 255, 0, 0.2)";
+                            } else if (ratio > 1.7) {
                                 particleMode = 'explode';
                                 cursor.style.borderColor = "#ff00ff"; // Magenta for Open
+                                cursor.style.backgroundColor = "rgba(255, 0, 255, 0.2)";
                             } else {
                                 particleMode = 'idle';
                             }
