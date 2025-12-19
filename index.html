@@ -118,7 +118,6 @@
             }
         }
 
-        /* [New Features Styles] */
         .controls {
             position: fixed;
             top: 20px;
@@ -200,10 +199,25 @@
             border-radius: 10px;
             box-shadow: 0 0 40px rgba(255, 215, 0, 0.2);
         }
+
+        #debug {
+            position: fixed;
+            top: 0;
+            right: 0;
+            color: lime;
+            font-family: monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            font-size: 10px;
+            pointer-events: none;
+            display: none;
+        }
     </style>
 </head>
 
 <body>
+    <div id="debug"></div>
     <div class="controls">
         <button onclick="window.APP.initCamera()">📷 开启相机(手势)</button>
         <button onclick="document.getElementById('fileInput').click()">🖼️ 放入照片</button>
@@ -223,7 +237,6 @@
     <div id="hand-cursor"></div>
     <div id="photoModal" onclick="this.style.display='none'"><img id="photoContent"></div>
 
-    <!-- MediaPipe Logic -->
     <script type="module">
         import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
@@ -299,31 +312,33 @@
 
         class ChristmasAnimation {
             constructor() {
-                this.canvas = document.getElementById('christmasCanvas');
-                this.ctx = this.canvas.getContext('2d');
-                this.loading = document.getElementById('loading');
+                try {
+                    this.canvas = document.getElementById('christmasCanvas');
+                    this.ctx = this.canvas.getContext('2d');
+                    this.loading = document.getElementById('loading');
 
-                this.photos = [];
-                this.explosionFactor = 0;
+                    this.photos = [];
+                    this.explosionFactor = 0;
 
-                this.isMobileDevice = isMobile;
-                this.performanceMultiplier = isMobile ? 0.7 : 1;
+                    this.isMobileDevice = isMobile;
+                    this.performanceMultiplier = isMobile ? 0.7 : 1;
 
-                this.autoRotation = 0;
-                this.rotationSpeed = 0.005;
-                this.growthProgress = 0; this.maxGrowth = 1;
+                    this.autoRotation = 0;
+                    this.rotationSpeed = 0.005;
+                    this.growthProgress = 0; this.maxGrowth = 1;
 
-                this.setupCanvas();
-                this.initColors();
-                this.createScene();
-                this.startAnimation();
+                    this.setupCanvas();
+                    this.initColors();
+                    this.createScene();
+                    this.startAnimation(); // CALLS START ANIMATION
 
-                window.addEventListener('resize', () => this.handleResize());
-                this.canvas.addEventListener('click', e => this.handleClick(e.clientX, e.clientY));
+                    window.addEventListener('resize', () => this.handleResize());
+                    this.canvas.addEventListener('click', e => this.handleClick(e.clientX, e.clientY));
+                } catch (e) { console.error("Constructor", e); document.getElementById('debug').style.display = 'block'; document.getElementById('debug').innerText = e.message; }
             }
 
             setupCanvas() {
-                this.dpr = Math.min(window.devicePixelRatio || 1, 3); // High DPI
+                this.dpr = Math.min(window.devicePixelRatio || 1, 2);
                 this.screenWidth = window.innerWidth; this.screenHeight = window.innerHeight;
                 this.canvas.width = this.screenWidth * this.dpr; this.canvas.height = this.screenHeight * this.dpr;
                 this.ctx.scale(this.dpr, this.dpr);
@@ -608,78 +623,88 @@
                 }
             }
 
+            // ADDED METHOD
+            startAnimation() {
+                this.draw();
+            }
+
             draw() {
-                this.ctx.fillStyle = "#0a0a2a";
-                this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
-                this.ctx.globalCompositeOperation = 'lighter';
-                const gf = this.explosionFactor > 0.9 ? 0 : 1 - this.explosionFactor;
-
-                if (gf > 0.01) {
-                    this.particles.forEach(p => {
-                        this.ctx.beginPath();
-                        this.ctx.arc(p.x, p.y, p.size * this.treeScale * (p.isTrunk ? 1.5 : 1), 0, Math.PI * 2);
-                        this.ctx.fillStyle = p.color;
-                        this.ctx.globalAlpha = (p.isTrunk ? 0.9 : 0.6) * gf;
-                        this.ctx.fill();
-                    });
-                    this.spiralLights.forEach(l => {
-                        this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
-                    });
-                    this.lights.forEach(l => {
-                        this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
-                    });
-                }
-
-                this.ctx.globalAlpha = 1;
-                const drawAGift = (g) => {
-                    this.ctx.save();
-                    this.ctx.translate(g.calcX, g.calcY);
-
-                    if (window.HAND_STATE && window.HAND_STATE.active) {
-                        const hx = window.HAND_STATE.x / 100 * this.screenWidth;
-                        const hy = window.HAND_STATE.y / 100 * this.screenHeight;
-                        if (Math.hypot(g.calcX - hx, g.calcY - hy) < g.size * 2) {
-                            this.ctx.shadowColor = "white"; this.ctx.shadowBlur = 20;
-                        }
-                    }
-
-                    if (this.explosionFactor > 0.5 && g.photo) {
-                        const sz = g.size * g.calcScale * 2.5;
-                        const r = g.photo.width / g.photo.height;
-                        this.ctx.beginPath();
-                        this.ctx.fillStyle = "#fff"; this.ctx.fillRect(-sz * r / 2 - 2, -sz / 2 - 2, sz * r + 4, sz + 4);
-                        this.ctx.drawImage(g.photo, -sz * r / 2, -sz / 2, sz * r, sz);
-                    } else {
-                        // Original High Accuracy Gift Draw
-                        if (g.glow > 0) {
-                            const glowGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, g.size * g.calcScale * 2);
-                            glowGradient.addColorStop(0, this.hexToRgba(g.color, g.glow * 0.3));
-                            glowGradient.addColorStop(1, this.hexToRgba(g.color, 0));
-                            this.ctx.fillStyle = glowGradient; this.ctx.beginPath(); this.ctx.arc(0, 0, g.size * g.calcScale * 2, 0, Math.PI * 2); this.ctx.fill();
-                        }
-                        this.drawGift(0, 0, g.size * g.calcScale, g.rotation, g.color, g.ribbonColor, g.glow, (g.sparkleTimer > 0 ? g.sparkleIntensity : 0));
-                    }
-                    this.ctx.restore();
-                };
-                [...this.topGifts, ...this.upperGifts, ...this.gifts].forEach(drawAGift);
-
-                if (this.topStar && gf > 0.01) {
-                    const s = this.topStar;
+                this.update(); // ENSURE UPDATE CALL
+                try {
+                    this.ctx.fillStyle = "#0a0a2a";
+                    this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
                     this.ctx.globalCompositeOperation = 'lighter';
-                    const g = this.ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.glowSize);
-                    g.addColorStop(0, 'rgba(255,255,200,0.9)'); g.addColorStop(1, 'rgba(255,140,0,0)');
-                    this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.glowSize, 0, Math.PI * 2); this.ctx.fill();
+                    const gf = this.explosionFactor > 0.9 ? 0 : 1 - this.explosionFactor;
 
-                    this.drawStar(s.x, s.y, s.spikes, s.size, s.size * s.innerRadius, s.color, s.rotation);
-                    this.drawStar(s.x, s.y, s.spikes, s.size * 0.7, s.size * 0.7 * s.innerRadius, '#FFFACD', s.rotation + 0.1);
+                    if (gf > 0.01) {
+                        this.particles.forEach(p => {
+                            this.ctx.beginPath();
+                            this.ctx.arc(p.x, p.y, p.size * this.treeScale * (p.isTrunk ? 1.5 : 1), 0, Math.PI * 2);
+                            this.ctx.fillStyle = p.color;
+                            this.ctx.globalAlpha = (p.isTrunk ? 0.9 : 0.6) * gf;
+                            this.ctx.fill();
+                        });
+                        this.spiralLights.forEach(l => {
+                            this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
+                        });
+                        this.lights.forEach(l => {
+                            this.drawLightGlow(l.x, l.y, l.size * this.treeScale, l.color, l.alpha * gf, l.glow * this.treeScale);
+                        });
+                    }
+
+                    this.ctx.globalAlpha = 1;
+                    const drawAGift = (g) => {
+                        this.ctx.save();
+                        if (isNaN(g.calcX) || isNaN(g.calcY)) { this.ctx.restore(); return; }
+                        this.ctx.translate(g.calcX, g.calcY);
+
+                        if (window.HAND_STATE && window.HAND_STATE.active) {
+                            const hx = window.HAND_STATE.x / 100 * this.screenWidth;
+                            const hy = window.HAND_STATE.y / 100 * this.screenHeight;
+                            if (Math.hypot(g.calcX - hx, g.calcY - hy) < g.size * 2) {
+                                this.ctx.shadowColor = "white"; this.ctx.shadowBlur = 20;
+                            }
+                        }
+
+                        if (this.explosionFactor > 0.5 && g.photo) {
+                            const sz = g.size * g.calcScale * 2.5;
+                            const r = g.photo.width / g.photo.height;
+                            this.ctx.beginPath();
+                            this.ctx.fillStyle = "#fff"; this.ctx.fillRect(-sz * r / 2 - 2, -sz / 2 - 2, sz * r + 4, sz + 4);
+                            this.ctx.drawImage(g.photo, -sz * r / 2, -sz / 2, sz * r, sz);
+                        } else {
+                            // Original High Accuracy Gift Draw
+                            if (g.glow > 0) {
+                                const glowGradient = this.ctx.createRadialGradient(0, 0, 0, 0, 0, g.size * g.calcScale * 2);
+                                glowGradient.addColorStop(0, this.hexToRgba(g.color, g.glow * 0.3));
+                                glowGradient.addColorStop(1, this.hexToRgba(g.color, 0));
+                                this.ctx.fillStyle = glowGradient; this.ctx.beginPath(); this.ctx.arc(0, 0, g.size * g.calcScale * 2, 0, Math.PI * 2); this.ctx.fill();
+                            }
+                            this.drawGift(0, 0, g.size * g.calcScale, g.rotation, g.color, g.ribbonColor, g.glow, (g.sparkleTimer > 0 ? g.sparkleIntensity : 0));
+                        }
+                        this.ctx.restore();
+                    };
+                    [...this.topGifts, ...this.upperGifts, ...this.gifts].forEach(drawAGift);
+
+                    if (this.topStar && gf > 0.01) {
+                        const s = this.topStar;
+                        this.ctx.globalCompositeOperation = 'lighter';
+                        const g = this.ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.glowSize);
+                        g.addColorStop(0, 'rgba(255,255,200,0.9)'); g.addColorStop(1, 'rgba(255,140,0,0)');
+                        this.ctx.fillStyle = g; this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.glowSize, 0, Math.PI * 2); this.ctx.fill();
+
+                        this.drawStar(s.x, s.y, s.spikes, s.size, s.size * s.innerRadius, s.color, s.rotation);
+                        this.drawStar(s.x, s.y, s.spikes, s.size * 0.7, s.size * 0.7 * s.innerRadius, '#FFFACD', s.rotation + 0.1);
+                        this.ctx.globalCompositeOperation = 'source-over';
+                    }
+
+                    this.ctx.globalAlpha = 1;
                     this.ctx.globalCompositeOperation = 'source-over';
-                }
-
-                this.ctx.globalAlpha = 1;
-                this.snowflakes.forEach(s => {
-                    this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.size * 0.5, 0, Math.PI * 2);
-                    this.ctx.fillStyle = `rgba(255,255,255,${s.opacity})`; this.ctx.fill();
-                });
+                    this.snowflakes.forEach(s => {
+                        this.ctx.beginPath(); this.ctx.arc(s.x, s.y, s.size * 0.5, 0, Math.PI * 2);
+                        this.ctx.fillStyle = `rgba(255,255,255,${s.opacity})`; this.ctx.fill();
+                    });
+                } catch (e) { console.error("Render Loop Error", e); }
 
                 requestAnimationFrame(() => this.draw());
             }
@@ -732,15 +757,20 @@
             }
 
             hexToRgba(hex, alpha = 1) {
-                const h = hex.replace('#', '');
-                const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
-                const r = (bigint >> 16) & 255;
-                const g = (bigint >> 8) & 255;
-                const b = bigint & 255;
-                return `rgba(${r},${g},${b},${alpha})`;
+                if (!hex) return `rgba(255,255,255,${alpha})`;
+                try {
+                    const h = hex.replace('#', '');
+                    const bigint = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+                    const r = (bigint >> 16) & 255;
+                    const g = (bigint >> 8) & 255;
+                    const b = bigint & 255;
+                    return `rgba(${r},${g},${b},${alpha})`;
+                } catch (e) { return `rgba(255,255,255,${alpha})`; }
             }
         }
 
+        // Ensure init
+        setTimeout(() => { if (!window.christmasAnimation) window.christmasAnimation = new ChristmasAnimation(); }, 500);
         window.onload = () => window.christmasAnimation = new ChristmasAnimation();
     </script>
 </body>
