@@ -349,29 +349,28 @@
                 this.centerX = this.screenWidth / 2;
                 this.centerY = this.screenHeight / 2;
 
-                // 2. ADAPTIVE Scaling (Fit-to-Box)
-                // We define a target safe area where the tree MUST fit.
-                // Mobile needs more safe area for browser UI elements
-                const widthFactor = this.isMobileDevice ? 0.75 : 0.9;
-                const heightFactor = this.isMobileDevice ? 0.6 : 0.75;
-                const availableW = this.screenWidth * widthFactor;
-                const availableH = this.screenHeight * heightFactor;
+                // 2. ADAPTIVE Scaling (Fit-to-Box) with Safe Zones
+                // Define safe margins: Top for header/notch, Bottom for text
+                const padTop = this.screenHeight * (this.isMobileDevice ? 0.15 : 0.1);
+                const padBottom = this.screenHeight * (this.isMobileDevice ? 0.25 : 0.15); // Large bottom pad for text
+                const padSide = this.screenWidth * (this.isMobileDevice ? 0.15 : 0.1);
 
-                // Base dimensions of the tree in its local coordinate system is roughly:
-                // Width ~ 600 units, Height ~ 700 units.
+                const availableW = this.screenWidth - padSide * 2;
+                const availableH = this.screenHeight - padTop - padBottom;
+
+                // Tree logical dimensions: Width ~600, Height ~700
                 const scaleX = availableW / 600;
                 const scaleY = availableH / 700;
-
-                // Use the smaller scale to ensure it fits both dimensions
                 this.treeScale = Math.min(scaleX, scaleY);
 
-                // 3. Vertical Centering
-                // Position the visual center of the tree at screen center
-                const visualTreeHeight = 650 * this.treeScale;
-                // On mobile, push it up a bit more to avoid text overlap
-                // Center the tree vertically on mobile
-                const vOffset = this.isMobileDevice ? 0.5 : 0.4;
-                this.crownBaseY = this.centerY + visualTreeHeight * vOffset;
+                // 3. Robust Vertical Centering
+                // Position the visual center of the tree at the visual center of the available space
+                // Tree visual center is approx 310 units above crownBaseY
+                // We want: crownBaseY - 310*scale = (screenTop + padTop) + availableH/2
+                // Simplified: crownBaseY = (Top + Bottom)/2 + 310*scale
+
+                const visibleCenterY = padTop + availableH / 2;
+                this.crownBaseY = visibleCenterY + 310 * this.treeScale;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
