@@ -330,7 +330,7 @@
                     this.setupCanvas();
                     this.initColors();
                     this.createScene();
-                    this.startAnimation(); // CALLS START ANIMATION
+                    this.startAnimation();
 
                     window.addEventListener('resize', () => this.handleResize());
                     this.canvas.addEventListener('click', e => this.handleClick(e.clientX, e.clientY));
@@ -344,12 +344,18 @@
                 this.ctx.scale(this.dpr, this.dpr);
                 this.centerX = this.screenWidth / 2; this.centerY = this.screenHeight / 2;
 
-                const baseSize = Math.min(this.screenWidth, this.screenHeight);
-                this.treeScale = baseSize / 850;
-                if (this.screenHeight > this.screenWidth * 1.5) this.treeScale *= 0.9;
+                // --- FIXED MOBILE SCALE ---
+                // If portrait mode, increase scale to fill width better
+                const isPortrait = this.screenHeight > this.screenWidth;
+                if (isPortrait && this.isMobileDevice) {
+                    this.treeScale = this.screenWidth / 550; // Increased scale for mobile portrait
+                } else {
+                    const baseSize = Math.min(this.screenWidth, this.screenHeight);
+                    this.treeScale = baseSize / 850;
+                }
 
                 this.trunkBaseY = this.screenHeight * 0.7;
-                this.crownBaseY = this.screenHeight * 0.82;
+                this.crownBaseY = this.screenHeight * 0.82; // Keep this logic for now
             }
 
             handleResize() { this.setupCanvas(); this.createScene(); }
@@ -382,7 +388,6 @@
                 if (this.loading) this.loading.style.display = 'none';
             }
 
-            // --- High Fidelity Methods ---
             createChristmasTreeTrunk(multiplier = 1) {
                 const trunkHeight = 140 * this.treeScale;
                 const trunkRadius = 50 * this.treeScale;
@@ -498,7 +503,7 @@
                     r.onload = e => { const i = new Image(); i.src = e.target.result; this.photos.push(i); this.assignPhotos(); };
                     r.readAsDataURL(f);
                 });
-                alert("Nice! Now open your hand to see the gallery!");
+                // ALERT REMOVED
             }
             assignPhotos() {
                 const all = [...this.gifts, ...this.upperGifts, ...this.topGifts];
@@ -524,10 +529,19 @@
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
             update() {
-                if (window.HAND_STATE) {
-                    if (window.HAND_STATE.gesture === 'OPEN_PALM') this.explosionFactor += (1 - this.explosionFactor) * 0.05;
-                    else if (window.HAND_STATE.gesture === 'FIST') this.explosionFactor += (0 - this.explosionFactor) * 0.05;
+                // FIXED HAND GESTURE LOGIC: REVERT IF IDLE
+                const h = window.HAND_STATE;
+                if (h) {
+                    if (h.active && h.gesture === 'OPEN_PALM') {
+                        this.explosionFactor += (1 - this.explosionFactor) * 0.05;
+                    } else if (h.active && h.gesture === 'FIST') {
+                        this.explosionFactor += (0 - this.explosionFactor) * 0.05;
+                    } else if (!h.active || h.gesture === 'IDLE') {
+                        // REVERT TO TREE IF NO HAND DETECTED
+                        this.explosionFactor += (0 - this.explosionFactor) * 0.05;
+                    }
                 }
+
                 const time = Date.now() / 1000;
                 this.autoRotation += this.rotationSpeed;
                 if (this.growthProgress < this.maxGrowth) this.growthProgress += 0.001;
@@ -629,7 +643,7 @@
             }
 
             draw() {
-                this.update(); // ENSURE UPDATE CALL
+                this.update();
                 try {
                     this.ctx.fillStyle = "#0a0a2a";
                     this.ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
