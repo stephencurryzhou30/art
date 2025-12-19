@@ -109,7 +109,8 @@
         {
             "imports": {
                 "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3"
             }
         }
     </script>
@@ -121,13 +122,19 @@
         <div class="controls">
             <button id="btn-add-image">添加图片</button>
             <button id="btn-add-model">添加模型 (.glb)</button>
+            <button id="btn-camera">📷 开启摄像头手势</button>
             <input type="file" id="file-input-image" accept="image/*" style="display: none;">
             <input type="file" id="file-input-model" accept=".glb,.gltf" style="display: none;">
         </div>
         <div class="instructions">
-            <p>鼠标移动: 干扰粒子 | 左键: 旋转视角 | 右键: 平移 | 滚轮: 缩放</p>
-            <p>点击物体可选中并进行变换 (按住 T/R/S 切换模式: 平移/旋转/缩放)</p>
+            <p>交互: 鼠标移动 / 触摸 / 摄像头手势 (食指)</p>
+            <p>左键: 旋转 | 右键: 平移 | 滚轮: 缩放</p>
+            <p>操作物体: 点击选中 -> T(移)/R(转)/S(缩) -> Del(删)</p>
         </div>
+        <!-- Video element for MediaPipe (Hidden but functional) -->
+        <video id="webcam"
+            style="position: absolute; bottom: 0; right: 0; width: 200px; height: 150px; transform: scaleX(-1); border-radius: 8px; opacity: 0; transition: opacity 0.5s;"
+            autoplay playsinline></video>
     </div>
     <div id="canvas-container"></div>
 
@@ -137,6 +144,7 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
         // Configuration
         const PARTICLE_COUNT = 2000;
@@ -150,13 +158,33 @@
         let selectedObject = null;
         const objects = []; // Interactable objects (excluding particles)
 
-        // Mouse interaction for particles
+        // Mouse/Touch/Hand interaction for particles
         const mouse = new THREE.Vector2(9999, 9999); // Off-screen initially
         const targetMouse = new THREE.Vector2(9999, 9999);
         const windowHalf = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
 
+        // MediaPipe State
+        let handLandmarker = undefined;
+        let webcamRunning = false;
+        let lastVideoTime = -1;
+
         init();
+        initMediaPipe();
         animate();
+
+        async function initMediaPipe() {
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                    delegate: "GPU"
+                },
+                runningMode: "VIDEO",
+                numHands: 1
+            });
+        }
 
         function init() {
             // Scene setup
@@ -210,6 +238,7 @@
             // Event Listeners
             window.addEventListener('resize', onWindowResize);
             document.addEventListener('mousemove', onDocumentMouseMove);
+            document.addEventListener('touchmove', onDocumentTouchMove, { passive: false });
             document.addEventListener('pointerdown', onPointerDown);
             document.addEventListener('keydown', onKeyDown);
 
@@ -264,12 +293,84 @@
             const fileInputImage = document.getElementById('file-input-image');
             const btnAddModel = document.getElementById('btn-add-model');
             const fileInputModel = document.getElementById('file-input-model');
+            const btnCamera = document.getElementById('btn-camera');
 
             btnAddImage.addEventListener('click', () => fileInputImage.click());
             btnAddModel.addEventListener('click', () => fileInputModel.click());
+            btnCamera.addEventListener('click', toggleCamera);
 
             fileInputImage.addEventListener('change', handleImageUpload);
             fileInputModel.addEventListener('change', handleModelUpload);
+        }
+
+        async function toggleCamera() {
+            const video = document.getElementById('webcam');
+            const btn = document.getElementById('btn-camera');
+
+            if (webcamRunning) {
+                webcamRunning = false;
+                const stream = video.srcObject;
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                video.srcObject = null;
+                video.style.opacity = 0;
+                btn.innerText = "📷 开启摄像头手势";
+            } else {
+                if (!handLandmarker) {
+                    console.log("Wait for handLandmarker to load before clicking!");
+                    return;
+                }
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    video.addEventListener("loadeddata", predictWebcam);
+                    webcamRunning = true;
+                    video.style.opacity = 0.8; // Show simple preview
+                    btn.innerText = "🛑 关闭摄像头";
+                } catch (err) {
+                    console.error(err);
+                    alert("无法访问摄像头: " + err.message);
+                }
+            }
+        }
+
+        async function predictWebcam() {
+            const video = document.getElementById('webcam');
+            if (webcamRunning) {
+                let startTimeMs = performance.now();
+                if (lastVideoTime !== video.currentTime) {
+                    lastVideoTime = video.currentTime;
+                    const results = handLandmarker.detectForVideo(video, startTimeMs);
+
+                    if (results.landmarks && results.landmarks.length > 0) {
+                        // Get Index Finger Tip (Landmark 8)
+                        const fingerTip = results.landmarks[0][8];
+
+                        // Map video coords (0-1) to screen space (-1 to 1) for raycaster
+                        // Note: Video is mirrored via CSS scaleX(-1), but raw landmarks are not mirrored relative to video frame?
+                        // Actually Mediapipe output matches the source. If we display mirrored, user intuition is mirrored.
+                        // Let's assume user wants to move hand RIGHT and have cursor go RIGHT.
+                        // If camera is mirrored in CSS, we see ourselves as a mirror.
+                        // Raw x: 0 (left of image) -> 1 (right of image).
+                        // If user creates 'mirror' experience, moving hand right (users perspective) 
+                        // -> camera sees hand moving 'left' in the frame (if selfie mode).
+                        // Let's just try direct mapping and invert x if needed.
+
+                        // Standard webcam: x=0 is usually user's RIGHT side (camera's left).
+                        // Let's invert x to make it feel like a cursor.
+                        const x = 1 - fingerTip.x;
+                        const y = fingerTip.y;
+
+                        // Mock event data for update logic
+                        updateInteractionFromNormal(x, y);
+                    } else {
+                        // Reset off screen if no hand
+                        targetMouse.set(9999, 9999);
+                    }
+                }
+                window.requestAnimationFrame(predictWebcam);
+            }
         }
 
         function handleImageUpload(e) {
@@ -336,14 +437,11 @@
             e.target.value = '';
         }
 
-        function onDocumentMouseMove(event) {
-            event.preventDefault();
+        function updateInteractionFromNormal(nx, ny) {
+            // nx, ny are 0 to 1
+            pointer.x = nx * 2 - 1;
+            pointer.y = -ny * 2 + 1;
 
-            // Map mouse to -1 to 1 for raycaster
-            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            // Particle Interaction Logic
             const vector = new THREE.Vector3(pointer.x, pointer.y, 0.5);
             vector.unproject(camera);
             const dir = vector.sub(camera.position).normalize();
@@ -352,6 +450,27 @@
 
             targetMouse.x = pos.x;
             targetMouse.y = pos.z;
+        }
+
+        function onDocumentMouseMove(event) {
+            event.preventDefault();
+            const nx = event.clientX / window.innerWidth;
+            const ny = event.clientY / window.innerHeight;
+            updateInteractionFromNormal(nx, ny);
+        }
+
+        function onDocumentTouchMove(event) {
+            // Handle touch as mouse for particles
+            if (event.touches.length > 0) {
+                // Prevent scrolling
+                // event.preventDefault(); // Don't prevent default everywhere or orbit controls might break? 
+                // OrbitControls handles touch for camera.
+                // We just want to update particle attractor.
+                const touch = event.touches[0];
+                const nx = touch.clientX / window.innerWidth;
+                const ny = touch.clientY / window.innerHeight;
+                updateInteractionFromNormal(nx, ny);
+            }
         }
 
         function onPointerDown(event) {
@@ -428,8 +547,12 @@
                 let cy = positions[i3 + 1];
                 let cz = positions[i3 + 2];
 
+                // Float animation
                 const floatY = oy + Math.sin(time + ox) * 0.5;
 
+                // Interaction
+                // Simple repulsion from 'targetMouse' which is on the XZ plane roughly
+                // We calculate distance on XZ plane
                 const dx = cx - targetMouse.x;
                 const dz = cz - targetMouse.y;
                 const dist = Math.sqrt(dx * dx + dz * dz);
