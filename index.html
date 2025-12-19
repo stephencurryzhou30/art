@@ -135,7 +135,7 @@
         </div>
         <!-- Video element for MediaPipe -->
         <video id="webcam"
-            style="position: absolute; bottom: 10px; right: 10px; width: 240px; height: 180px; transform: scaleX(-1); border-radius: 12px; border: 2px solid rgba(0,255,255,0.5); visibility: hidden; z-index: 100;"
+            style="position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.7;"
             autoplay playsinline></video>
         <!-- Custom Hand Cursor -->
         <div id="hand-cursor"
@@ -430,7 +430,7 @@
             }
         }
 
-        // Simulate Mouse Events for Three.js controls
+        // Simulate Pointer Events for Three.js controls (PointerEvent is preferred over MouseEvent)
         function simulateMouseEvent(type, nx, ny) {
             const canvas = renderer.domElement;
             const rect = canvas.getBoundingClientRect();
@@ -438,17 +438,33 @@
             const clientX = rect.left + nx * rect.width;
             const clientY = rect.top + ny * rect.height;
 
-            const event = new MouseEvent(type, {
+            // Map mouse types to pointer types
+            let pointerType = type;
+            if (type === 'mousedown') pointerType = 'pointerdown';
+            if (type === 'mousemove') pointerType = 'pointermove';
+            if (type === 'mouseup') pointerType = 'pointerup';
+
+            const event = new PointerEvent(pointerType, {
                 view: window,
                 bubbles: true,
                 cancelable: true,
                 clientX: clientX,
                 clientY: clientY,
                 button: 0, // Left button
-                buttons: type === 'mousedown' ? 1 : (type === 'mouseup' ? 0 : (isPinching ? 1 : 0))
+                buttons: type === 'mousedown' ? 1 : (type === 'mouseup' ? 0 : (isPinching ? 1 : 0)),
+                pointerId: 1,
+                pointerType: 'mouse', // Simulate mouse to avoid touch logic issues
+                isPrimary: true
             });
 
+            // Dispatch both for compatibility if needed, but PointerEvent is usually enough for Three.js
             canvas.dispatchEvent(event);
+
+            // Also notify document for custom listeners if they are bound to document
+            // Our onPointerDown is on document, so we might need to dispatch there too or change listener to canvas
+            if (pointerType === 'pointerdown' || pointerType === 'pointerup') {
+                document.dispatchEvent(new PointerEvent(pointerType, event));
+            }
         }
 
         function handleImageUpload(e) {
