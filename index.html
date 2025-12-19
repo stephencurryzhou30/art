@@ -188,24 +188,14 @@
 
                 btnCamera.innerText = "⏳ 下载手势模型...";
 
-                // Try to load model - First attempt: Remote (Google)
-                // If specific error (network), try Fallback: Local
-                let baseOptions = {
-                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-                    delegate: "GPU"
-                };
+                // 2. Load Model Strategy: LOCAL FIRST -> REMOTE FALLBACK
+                // This prevents waiting for Google timeout if user has the file.
 
+                let success = false;
+
+                // Attempt 1: Local
                 try {
-                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                        baseOptions: baseOptions,
-                        runningMode: "VIDEO",
-                        numHands: 1
-                    });
-                } catch (firstError) {
-                    console.warn("Remote model load failed, trying local fallback...", firstError);
-                    btnCamera.innerText = "⚠️ 尝试加载本地模型...";
-
-                    // Fallback to local file
+                    console.log("Attempting local load...");
                     handLandmarker = await HandLandmarker.createFromOptions(vision, {
                         baseOptions: {
                             modelAssetPath: `./hand_landmarker.task`,
@@ -214,6 +204,30 @@
                         runningMode: "VIDEO",
                         numHands: 1
                     });
+                    success = true;
+                    console.log("Local model loaded successfully.");
+                } catch (localError) {
+                    console.warn("Local model not found or failed, switching to remote...", localError);
+                }
+
+                // Attempt 2: Remote (Google) if Local failed
+                if (!success) {
+                    btnCamera.innerText = "☁️ 尝试云端下载...";
+                    try {
+                        handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                            baseOptions: {
+                                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                                delegate: "GPU"
+                            },
+                            runningMode: "VIDEO",
+                            numHands: 1
+                        });
+                        success = true;
+                        console.log("Remote model loaded successfully.");
+                    } catch (remoteError) {
+                        console.error("Remote load failed:", remoteError);
+                        throw new Error("Local and Remote load both failed.");
+                    }
                 }
 
                 btnCamera.innerText = "📷 开启摄像头手势";
