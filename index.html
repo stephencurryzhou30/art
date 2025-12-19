@@ -188,29 +188,57 @@
 
                 btnCamera.innerText = "⏳ 下载手势模型...";
 
-                handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                    baseOptions: {
-                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-                        delegate: "GPU"
-                    },
-                    runningMode: "VIDEO",
-                    numHands: 1
-                });
+                // Try to load model - First attempt: Remote (Google)
+                // If specific error (network), try Fallback: Local
+                let baseOptions = {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                    delegate: "GPU"
+                };
+
+                try {
+                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                        baseOptions: baseOptions,
+                        runningMode: "VIDEO",
+                        numHands: 1
+                    });
+                } catch (firstError) {
+                    console.warn("Remote model load failed, trying local fallback...", firstError);
+                    btnCamera.innerText = "⚠️ 尝试加载本地模型...";
+
+                    // Fallback to local file
+                    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+                        baseOptions: {
+                            modelAssetPath: `./hand_landmarker.task`,
+                            delegate: "GPU"
+                        },
+                        runningMode: "VIDEO",
+                        numHands: 1
+                    });
+                }
+
                 btnCamera.innerText = "📷 开启摄像头手势";
                 btnCamera.disabled = false;
                 console.log("MediaPipe Loaded Successfully");
             } catch (error) {
                 console.error("MediaPipe Load Error:", error);
 
-                let msg = "手势模型加载失败！\n";
-                if (error.message && error.message.includes("fetch")) {
-                    msg += "原因: 网络网络连接受阻 (可能无法访问 Google 服务)。\n建议: 请尝试开启 VPN 或更换网络环境。";
-                } else {
-                    msg += "原因: " + error.message;
-                }
+                let msg = "手势模型加载失败！\n\n";
+                msg += "原因: 无法连接 Google 服务器且未找到本地模型。\n\n";
+                msg += "解决方案 (无需 VPN):\n";
+                msg += "1. 请手动下载模型文件: hand_landmarker.task\n";
+                msg += "2. 将下载的文件放到 index.html 同级目录下。\n";
+                msg += "3. 刷新页面重试。";
 
                 btnCamera.innerText = "❌ 模型加载出错";
                 alert(msg);
+
+                // Add a temporary download link to the page for convenience
+                const link = document.createElement('a');
+                link.href = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+                link.innerText = ">> 点击手动下载模型 (可能需镜像) <<";
+                link.style.cssText = "position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); color: cyan; background: rgba(0,0,0,0.8); padding: 10px; z-index: 2000; text-decoration: none; border: 1px solid cyan; border-radius: 4px;";
+                document.body.appendChild(link);
+
                 btnCamera.innerText = "🔄 重试加载模型";
                 btnCamera.disabled = false;
                 btnCamera.onclick = initMediaPipe;
