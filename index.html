@@ -133,13 +133,17 @@
             <p>- <b>变换物体</b>: 捏合拖动轴 (T:移, R:转, S:缩)</p>
             <p>- <b>旋转视角</b>: 对准空白处捏合拖动</p>
         </div>
-        <video id="webcam"
-            style="position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.8;"
-            autoplay playsinline></video>
-        <!-- Custom Hand Cursor -->
-        <div id="hand-cursor"
-            style="position: fixed; width: 30px; height: 30px; border: 3px solid #00ffff; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); display: none; z-index: 9999; box-shadow: 0 0 15px #00ffff; background: rgba(0, 255, 255, 0.1);">
-        </div>
+    </div>
+    </div>
+
+    <!-- Video element for MediaPipe (Moved outside UI container to position relative to screen) -->
+    <video id="webcam"
+        style="position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.8;"
+        autoplay playsinline></video>
+
+    <!-- Custom Hand Cursor -->
+    <div id="hand-cursor"
+        style="position: fixed; width: 30px; height: 30px; border: 3px solid #00ffff; border-radius: 50%; pointer-events: none; transform: translate(-50%, -50%); display: none; z-index: 9999; box-shadow: 0 0 15px #00ffff; background: rgba(0, 255, 255, 0.1);">
     </div>
     <div id="canvas-container"></div>
 
