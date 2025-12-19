@@ -338,24 +338,35 @@
             }
 
             setupCanvas() {
+                // 1. Setup Canvas & DPR
                 this.dpr = Math.min(window.devicePixelRatio || 1, this.isMobileDevice ? 1.5 : 2);
-                this.screenWidth = window.innerWidth; this.screenHeight = window.innerHeight;
-                this.canvas.width = this.screenWidth * this.dpr; this.canvas.height = this.screenHeight * this.dpr;
+                this.screenWidth = window.innerWidth;
+                this.screenHeight = window.innerHeight;
+                this.canvas.width = this.screenWidth * this.dpr;
+                this.canvas.height = this.screenHeight * this.dpr;
                 this.ctx.scale(this.dpr, this.dpr);
-                this.centerX = this.screenWidth / 2; this.centerY = this.screenHeight / 2;
 
-                const isPortrait = this.screenHeight > this.screenWidth;
-                if (isPortrait && this.isMobileDevice) {
-                    // FIXED: Smaller scale for mobile to fit screen completely
-                    this.treeScale = this.screenWidth / 650;
-                } else {
-                    const baseSize = Math.min(this.screenWidth, this.screenHeight);
-                    this.treeScale = baseSize / 850;
-                }
+                this.centerX = this.screenWidth / 2;
+                this.centerY = this.screenHeight / 2;
 
-                // FIXED: Centering based on visual height
-                const approxTreeHeight = 620 * this.treeScale;
-                this.crownBaseY = this.centerY + approxTreeHeight * 0.45;
+                // 2. ADAPTIVE Scaling (Fit-to-Box)
+                // We define a target safe area where the tree MUST fit.
+                // 90% of Screen Width, 75% of Screen Height (to leave room for "Merry Christmas" text)
+                const availableW = this.screenWidth * 0.9;
+                const availableH = this.screenHeight * 0.75;
+
+                // Base dimensions of the tree in its local coordinate system is roughly:
+                // Width ~ 600 units, Height ~ 700 units.
+                const scaleX = availableW / 600;
+                const scaleY = availableH / 700;
+
+                // Use the smaller scale to ensure it fits both dimensions
+                this.treeScale = Math.min(scaleX, scaleY);
+
+                // 3. Vertical Centering
+                // Position the visual center of the tree at screen center
+                const visualTreeHeight = 650 * this.treeScale;
+                this.crownBaseY = this.centerY + visualTreeHeight * 0.4; // Push down slightly to center visually
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
@@ -518,7 +529,7 @@
             }
 
             handleClick(cx, cy) {
-                // FIXED: Logic removed. Clicking does not open photo modal anymore.
+                // Disabled photo modal as requested
             }
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
@@ -529,9 +540,8 @@
                         this.explosionFactor += (1 - this.explosionFactor) * 0.05;
                     } else if (h.active && h.gesture === 'FIST') {
                         this.explosionFactor += (0 - this.explosionFactor) * 0.05;
-                    } else if (!h.active || h.gesture === 'IDLE') {
-                        this.explosionFactor += (0 - this.explosionFactor) * 0.05;
                     }
+                    // REMOVED AUTO REVERT LOGIC
                 }
 
                 const time = Date.now() / 1000;
