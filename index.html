@@ -426,6 +426,9 @@
         let initialPinchDist = 0;
         let initialScale = new THREE.Vector3();
 
+        // Particle Gesture State
+        let particleMode = 'idle'; // 'idle', 'gather', 'explode'
+
         async function predictWebcam() {
             const video = document.getElementById('webcam');
             const cursor = document.getElementById('hand-cursor');
@@ -440,65 +443,99 @@
                         const landmarks = results.landmarks[0];
                         const fingerTip = landmarks[8];
                         const thumbTip = landmarks[4];
+                        const wrist = landmarks[0];
 
                         // Mirrored X coordinates
                         const x = 1 - fingerTip.x;
                         const y = fingerTip.y;
 
-                        // Update visual cursor
+                        // Update Pointer for Raycaster
+                        updateInteractionFromNormal(x, y);
+
+                        // Update Visual Cursor
                         cursor.style.left = (x * 100) + '%';
                         cursor.style.top = (y * 100) + '%';
+                        cursor.style.display = 'block';
 
-                        // Calculate pinch distance (normalized 0-1 approx)
+                        // --- Gesture Detection ---
+
+                        // 1. Pinch (Priority High - for Object Manipulation)
                         const dx = landmarks[8].x - landmarks[4].x;
                         const dy = landmarks[8].y - landmarks[4].y;
-                        const dist2d = Math.sqrt(dx * dx + dy * dy);
-
-                        // Pinch Logic
+                        const pinchDist = Math.sqrt(dx * dx + dy * dy);
                         const PINCH_THRESHOLD = 0.05;
 
-                        if (dist2d < PINCH_THRESHOLD) {
-                            // --- PINCHING ---
+                        if (pinchDist < PINCH_THRESHOLD) {
+                            particleMode = 'idle'; // Pinching suppresses particle effects usually
+
+                            // Visual Feedback
                             cursor.style.borderColor = "#ff0000";
                             cursor.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
                             cursor.style.transform = "translate(-50%, -50%) scale(0.8)";
 
                             if (!isPinching) {
-                                // FIRST FRAME OF PINCH (Start)
                                 isPinching = true;
-
-                                // Check what we are pinching
-                                handlePinchStart(x, y, dist2d);
+                                handlePinchStart(x, y, pinchDist);
                             } else {
-                                // CONTINUING PINCH (Drag/Scale)
-                                handlePinchMove(x, y, dist2d);
+                                handlePinchMove(x, y, pinchDist);
                             }
-
                         } else {
-                            // --- RELEASED ---
+                            // Released Pinch
                             if (isPinching) {
                                 isPinching = false;
                                 handlePinchEnd();
                             }
 
-                            // Normal State
                             cursor.style.borderColor = "#00ffff";
                             cursor.style.backgroundColor = "transparent";
                             cursor.style.transform = "translate(-50%, -50%) scale(1)";
+
+                            // 2. Fist vs Open Hand (For Particles)
+                            // Calculate average distance of tips to wrist
+                            // Tips: 8(Index), 12(Middle), 16(Ring), 20(Pinky)
+                            // Thumb(4) is excluded as it's often close in open hand too
+                            const tips = [8, 12, 16, 20];
+                            let totalDist = 0;
+                            tips.forEach(idx => {
+                                const tip = landmarks[idx];
+                                const d = Math.sqrt(
+                                    Math.pow(tip.x - wrist.x, 2) +
+                                    Math.pow(tip.y - wrist.y, 2)
+                                );
+                                totalDist += d;
+                            });
+                            const avgDist = totalDist / 4;
+
+                            // Thresholds (Normalized coords approx)
+                            // Fist: Tips close to wrist (< 0.25 usually)
+                            // Open: Tips far (> 0.4 usually)
+
+                            if (avgDist < 0.25) {
+                                particleMode = 'gather';
+                                cursor.style.borderColor = "#ffff00"; // Yellow for Fist
+                            } else if (avgDist > 0.4) {
+                                particleMode = 'explode';
+                                cursor.style.borderColor = "#ff00ff"; // Magenta for Open
+                            } else {
+                                particleMode = 'idle';
+                            }
                         }
 
                     } else {
                         // Hand lost
+                        cursor.style.display = 'none';
                         if (isPinching) {
                             isPinching = false;
                             handlePinchEnd();
                         }
+                        particleMode = 'idle';
                     }
                 }
                 window.requestAnimationFrame(predictWebcam);
             }
         }
 
+        // ... Pinch Handlers ...
         function handlePinchStart(nx, ny, dist) {
             // Convert normalized (0-1) to clip space (-1 to +1)
             pointer.x = (nx * 2) - 1;
@@ -510,75 +547,57 @@
             const intersects = raycaster.intersectObjects(objects, false);
 
             if (intersects.length > 0) {
-                // HIT OBJECT -> START DRAG
                 selectedObject = intersects[0].object;
                 isDragging = true;
-
-                // Disable Orbit Controls
                 controls.enabled = false;
 
-                // Setup Drag Plane (facing camera, at object position)
                 dragPlane.setFromNormalAndCoplanarPoint(
                     camera.getWorldDirection(dragPlane.normal),
                     selectedObject.position
                 );
 
-                // Calculate Offset
                 const intersection = new THREE.Vector3();
                 if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
                     dragOffset.subVectors(intersection, selectedObject.position);
                 }
 
-                // Setup Scale
                 initialPinchDist = dist;
                 initialScale.copy(selectedObject.scale);
-
-                // Optional: Highlight
-                // selectedObject.material.emissive.set(0x333333); 
-            } else {
-                // HIT NOTHING -> ROTATE CAMERA (Simulate Mouse)
-                simulateMouseEvent("mousedown", nx, ny);
             }
         }
 
         function handlePinchMove(nx, ny, dist) {
             if (isDragging && selectedObject) {
-                // DRAGGING OBJECT
                 pointer.x = (nx * 2) - 1;
                 pointer.y = -(ny * 2) + 1;
                 raycaster.setFromCamera(pointer, camera);
 
-                // 1. Position (Translate)
                 const intersection = new THREE.Vector3();
                 if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
                     selectedObject.position.subVectors(intersection, dragOffset);
                 }
 
-                // 2. Scale (Pinch Zoom)
-                // Avoid division by zero and extreme scaling
                 if (initialPinchDist > 0.001) {
                     const scaleFactor = dist / initialPinchDist;
-                    // Limit scale factor range for safety (0.2x to 5x)
                     const clampedScale = Math.max(0.2, Math.min(5, scaleFactor));
-
                     selectedObject.scale.copy(initialScale).multiplyScalar(clampedScale);
                 }
-
             } else {
-                // ROTATING CAMERA
-                simulateMouseEvent("mousemove", nx, ny);
+                // Camera Rotation if pinching empty space
+                // simulateMouseEvent("mousemove", nx, ny); // Removed as per instruction diff
+                // Also trigger 'fist' like behavior or drag scene? 
+                // Let's keep it simple: Pinch = UI/Camera, Fist/Open = Particles
             }
         }
 
         function handlePinchEnd() {
             if (isDragging) {
                 isDragging = false;
-                controls.enabled = true; // Re-enable OrbitControls
-                // selectedObject = null; // Keep selected? Or deselect? Let's keep it.
-            } else {
-                simulateMouseEvent("mouseup", 0, 0); // Position doesn't matter much for up
+                controls.enabled = true;
             }
+            // simulateMouseEvent("mouseup", 0, 0); // Removed as per instruction diff
         }
+        // ... End Pinch Handlers ...
 
         // Simulate Pointer Events for Camera Rotation
         function simulateMouseEvent(type, nx, ny) {
@@ -782,28 +801,66 @@
                 let cy = positions[i3 + 1];
                 let cz = positions[i3 + 2];
 
-                // Float animation
+                // Base Float Animation
                 const floatY = oy + Math.sin(time + ox) * 0.5;
 
-                // Interaction
-                // Simple repulsion from 'targetMouse' which is on the XZ plane roughly
-                // We calculate distance on XZ plane
+                // --- Interaction Logic ---
+                // Calculate distance to pointer (projected on XZ plane approx)
                 const dx = cx - targetMouse.x;
                 const dz = cz - targetMouse.y;
+                // Use 3D distance for nicer effect? targetMouse is on XZ plane y=0 though.
+                // Let's assume sphere of influence around targetMouse
+                // But targetMouse is only X/Z from raycast to y=0 plane? 
+                // Actually updateInteractionFromNormal raycasts to a plane perpendicular to camera?
+                // Let's just use the dx/dz generic distance for now.
+
                 const dist = Math.sqrt(dx * dx + dz * dz);
 
-                if (dist < 5) {
-                    const angle = Math.atan2(dz, dx);
-                    const force = (5 - dist) * 0.2;
-                    cx += Math.cos(angle) * force;
-                    cz += Math.sin(angle) * force;
+                if (particleMode === 'gather') {
+                    // FIST: Strong Attraction (Implode)
+                    // Move towards targetMouse
+                    if (dist > 1) { // Don't collapse to singularity
+                        cx -= dx * 0.05;
+                        cz -= dz * 0.05;
+                        // Also pull Y towards center?
+                        // cy += (10 - cy) * 0.05; // Pull to height 10?
+                    }
+                } else if (particleMode === 'explode') {
+                    // OPEN: Strong Repulsion (Explode)
+                    if (dist < 30) { // Blast radius
+                        const force = (30 - dist) * 0.1;
+                        const angle = Math.atan2(dz, dx);
+                        cx += Math.cos(angle) * force;
+                        cz += Math.sin(angle) * force;
+                    } else {
+                        // Return to home slowly
+                        cx += (ox - cx) * 0.02;
+                        cz += (oz - cz) * 0.02;
+                    }
                 } else {
-                    cx += (ox - cx) * 0.05;
-                    cz += (oz - cz) * 0.05;
+                    // IDLE: Gentle Repulsion (Original behavior)
+                    if (dist < 5) {
+                        const angle = Math.atan2(dz, dx);
+                        const force = (5 - dist) * 0.2;
+                        cx += Math.cos(angle) * force;
+                        cz += Math.sin(angle) * force;
+                    } else {
+                        // Return to home
+                        cx += (ox - cx) * 0.05;
+                        cz += (oz - cz) * 0.05;
+                    }
+                }
+
+                // Height adjustment for gather mode?
+                if (particleMode === 'gather') {
+                    // Keep Y somewhat floating but maybe chaotic?
+                    cy = floatY;
+                } else {
+                    cy = floatY;
                 }
 
                 positions[i3] = cx;
-                positions[i3 + 1] = floatY;
+                positions[i3 + 1] = cy;
                 positions[i3 + 2] = cz;
             }
             particles.geometry.attributes.position.needsUpdate = true;
