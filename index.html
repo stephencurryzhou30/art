@@ -369,7 +369,8 @@
                 // Position the visual center of the tree at screen center
                 const visualTreeHeight = 650 * this.treeScale;
                 // On mobile, push it up a bit more to avoid text overlap
-                const vOffset = this.isMobileDevice ? 0.32 : 0.4;
+                // Center the tree vertically on mobile
+                const vOffset = this.isMobileDevice ? 0.5 : 0.4;
                 this.crownBaseY = this.centerY + visualTreeHeight * vOffset;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
