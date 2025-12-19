@@ -133,18 +133,8 @@
             <p>- <b>变换物体</b>: 捏合拖动轴 (T:移, R:转, S:缩)</p>
             <p>- <b>旋转视角</b>: 对准空白处捏合拖动</p>
         </div>
-        <div id="toolbar"
-            style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 1000; pointer-events: none;">
-            <button id="mode-translate" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">↔️
-                移动</button>
-            <button id="mode-rotate" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">🔄 旋转</button>
-            <button id="mode-scale" style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px;">🔍 缩放</button>
-            <button id="mode-delete"
-                style="pointer-events: auto; font-size: 1.2rem; padding: 12px 24px; background: rgba(255, 0, 0, 0.3); border-color: rgba(255,0,0,0.5);">🗑️
-                删除</button>
-        </div>
         <video id="webcam"
-            style="position: absolute; top: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.8;"
+            style="position: absolute; bottom: 20px; right: 20px; width: 160px; height: 120px; transform: scaleX(-1); border-radius: 8px; border: 2px solid rgba(0,255,255,0.3); visibility: hidden; z-index: 1000; pointer-events: none; opacity: 0.8;"
             autoplay playsinline></video>
         <!-- Custom Hand Cursor -->
         <div id="hand-cursor"
@@ -336,28 +326,11 @@
             const fileInputModel = document.getElementById('file-input-model');
             const btnCamera = document.getElementById('btn-camera');
 
-            // Mode Buttons
-            const btnTrans = document.getElementById('mode-translate');
-            const btnRot = document.getElementById('mode-rotate');
-            const btnScale = document.getElementById('mode-scale');
-            const btnDel = document.getElementById('mode-delete');
-
             btnAddImage.addEventListener('click', () => fileInputImage.click());
             btnAddModel.addEventListener('click', () => fileInputModel.click());
             btnCamera.addEventListener('click', toggleCamera);
 
-            btnTrans.addEventListener('click', () => transformControl.setMode('translate'));
-            btnRot.addEventListener('click', () => transformControl.setMode('rotate'));
-            btnScale.addEventListener('click', () => transformControl.setMode('scale'));
-            btnDel.addEventListener('click', () => {
-                if (selectedObject) {
-                    scene.remove(selectedObject);
-                    transformControl.detach();
-                    const idx = objects.indexOf(selectedObject);
-                    if (idx > -1) objects.splice(idx, 1);
-                    selectedObject = null;
-                }
-            });
+            // Removed Mode Buttons as requested
 
             fileInputImage.addEventListener('change', handleImageUpload);
             fileInputModel.addEventListener('change', handleModelUpload);
@@ -400,6 +373,13 @@
             }
         }
 
+        // Interaction State
+        let isDragging = false;
+        let dragOffset = new THREE.Vector3();
+        let dragPlane = new THREE.Plane();
+        let initialPinchDist = 0;
+        let initialScale = new THREE.Vector3();
+
         async function predictWebcam() {
             const video = document.getElementById('webcam');
             const cursor = document.getElementById('hand-cursor');
@@ -412,63 +392,60 @@
 
                     if (results.landmarks && results.landmarks.length > 0) {
                         const landmarks = results.landmarks[0];
-                        const fingerTip = landmarks[8]; // Index tip
-                        const thumbTip = landmarks[4];  // Thumb tip
+                        const fingerTip = landmarks[8];
+                        const thumbTip = landmarks[4];
 
-                        // 1. Calculate Cursor Position (Midpoint or Index Tip)
-                        // Inverting X because webcam is mirrored user-experience
+                        // Mirrored X coordinates
                         const x = 1 - fingerTip.x;
                         const y = fingerTip.y;
 
-                        // Update Pointer
-                        updateInteractionFromNormal(x, y);
-
-                        // Update Visual Cursor
+                        // Update visual cursor
                         cursor.style.left = (x * 100) + '%';
                         cursor.style.top = (y * 100) + '%';
 
-                        // 2. Pinch Detection
-                        // Calculate distance between Index(8) and Thumb(4)
+                        // Calculate pinch distance (normalized 0-1 approx)
                         const dx = landmarks[8].x - landmarks[4].x;
                         const dy = landmarks[8].y - landmarks[4].y;
-                        const dz = landmarks[8].z - landmarks[4].z; // Optional depth check
-                        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) * 10; // Simple scale scaling?
-
-                        // Threshold usually needs calibration, but < 0.1 in normalized coords is decent for pinch
-                        // Normalized 2D check is often robust enough for general pinch
                         const dist2d = Math.sqrt(dx * dx + dy * dy);
 
+                        // Pinch Logic
                         const PINCH_THRESHOLD = 0.05;
 
                         if (dist2d < PINCH_THRESHOLD) {
+                            // --- PINCHING ---
+                            cursor.style.borderColor = "#ff0000";
+                            cursor.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
+                            cursor.style.transform = "translate(-50%, -50%) scale(0.8)";
+
                             if (!isPinching) {
+                                // FIRST FRAME OF PINCH (Start)
                                 isPinching = true;
-                                cursor.style.borderColor = "#ff0000"; // Red when pinching
-                                cursor.style.backgroundColor = "rgba(255, 0, 0, 0.3)";
-                                cursor.style.transform = "translate(-50%, -50%) scale(0.8)";
-                                simulateMouseEvent("mousedown", x, y);
+
+                                // Check what we are pinching
+                                handlePinchStart(x, y, dist2d);
                             } else {
-                                // Drag
-                                simulateMouseEvent("mousemove", x, y);
+                                // CONTINUING PINCH (Drag/Scale)
+                                handlePinchMove(x, y, dist2d);
                             }
+
                         } else {
+                            // --- RELEASED ---
                             if (isPinching) {
                                 isPinching = false;
-                                cursor.style.borderColor = "#00ffff";
-                                cursor.style.backgroundColor = "transparent";
-                                cursor.style.transform = "translate(-50%, -50%) scale(1)";
-                                simulateMouseEvent("mouseup", x, y);
+                                handlePinchEnd();
                             }
-                            // Just Move
-                            simulateMouseEvent("mousemove", x, y);
+
+                            // Normal State
+                            cursor.style.borderColor = "#00ffff";
+                            cursor.style.backgroundColor = "transparent";
+                            cursor.style.transform = "translate(-50%, -50%) scale(1)";
                         }
 
                     } else {
-                        targetMouse.set(9999, 9999);
-                        // If hand lost during pinch, release
+                        // Hand lost
                         if (isPinching) {
                             isPinching = false;
-                            simulateMouseEvent("mouseup", 0, 0); // Pos broken but release lock
+                            handlePinchEnd();
                         }
                     }
                 }
@@ -476,16 +453,93 @@
             }
         }
 
-        // Simulate Pointer Events for Three.js controls (PointerEvent is preferred over MouseEvent)
+        function handlePinchStart(nx, ny, dist) {
+            // Convert normalized (0-1) to clip space (-1 to +1)
+            pointer.x = (nx * 2) - 1;
+            pointer.y = -(ny * 2) + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+
+            // Check intersection with interactable objects
+            const intersects = raycaster.intersectObjects(objects, false);
+
+            if (intersects.length > 0) {
+                // HIT OBJECT -> START DRAG
+                selectedObject = intersects[0].object;
+                isDragging = true;
+
+                // Disable Orbit Controls
+                controls.enabled = false;
+
+                // Setup Drag Plane (facing camera, at object position)
+                dragPlane.setFromNormalAndCoplanarPoint(
+                    camera.getWorldDirection(dragPlane.normal),
+                    selectedObject.position
+                );
+
+                // Calculate Offset
+                const intersection = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
+                    dragOffset.subVectors(intersection, selectedObject.position);
+                }
+
+                // Setup Scale
+                initialPinchDist = dist;
+                initialScale.copy(selectedObject.scale);
+
+                // Optional: Highlight
+                // selectedObject.material.emissive.set(0x333333); 
+            } else {
+                // HIT NOTHING -> ROTATE CAMERA (Simulate Mouse)
+                simulateMouseEvent("mousedown", nx, ny);
+            }
+        }
+
+        function handlePinchMove(nx, ny, dist) {
+            if (isDragging && selectedObject) {
+                // DRAGGING OBJECT
+                pointer.x = (nx * 2) - 1;
+                pointer.y = -(ny * 2) + 1;
+                raycaster.setFromCamera(pointer, camera);
+
+                // 1. Position (Translate)
+                const intersection = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
+                    selectedObject.position.subVectors(intersection, dragOffset);
+                }
+
+                // 2. Scale (Pinch Zoom)
+                // Avoid division by zero and extreme scaling
+                if (initialPinchDist > 0.001) {
+                    const scaleFactor = dist / initialPinchDist;
+                    // Limit scale factor range for safety (0.2x to 5x)
+                    const clampedScale = Math.max(0.2, Math.min(5, scaleFactor));
+
+                    selectedObject.scale.copy(initialScale).multiplyScalar(clampedScale);
+                }
+
+            } else {
+                // ROTATING CAMERA
+                simulateMouseEvent("mousemove", nx, ny);
+            }
+        }
+
+        function handlePinchEnd() {
+            if (isDragging) {
+                isDragging = false;
+                controls.enabled = true; // Re-enable OrbitControls
+                // selectedObject = null; // Keep selected? Or deselect? Let's keep it.
+            } else {
+                simulateMouseEvent("mouseup", 0, 0); // Position doesn't matter much for up
+            }
+        }
+
+        // Simulate Pointer Events for Camera Rotation
         function simulateMouseEvent(type, nx, ny) {
             const canvas = renderer.domElement;
             const clientX = nx * window.innerWidth;
             const clientY = ny * window.innerHeight;
 
-            // Determine target element under cursor (Button or Canvas)
-            const targetElement = document.elementFromPoint(clientX, clientY) || canvas;
-
-            // Map mouse types to pointer types
             let pointerType = type;
             if (type === 'mousedown') pointerType = 'pointerdown';
             if (type === 'mousemove') pointerType = 'pointermove';
@@ -497,22 +551,13 @@
                 cancelable: true,
                 clientX: clientX,
                 clientY: clientY,
-                button: 0, // Left button
-                buttons: type === 'mousedown' ? 1 : (type === 'mouseup' ? 0 : (isPinching ? 1 : 0)),
+                button: 0,
+                buttons: type === 'mousedown' ? 1 : (type === 'mouseup' ? 0 : 0),
                 pointerId: 1,
-                pointerType: 'mouse', // Simulate mouse to avoid touch logic issues
+                pointerType: 'mouse',
                 isPrimary: true
             });
-
-            // Dispatch to correct target (Button or Canvas)
-            targetElement.dispatchEvent(event);
-
-            // If it's a click (mousedown then mouseup on same element), simulation is complex.
-            // But 'click' event usually generated by browser after down/up.
-            // Let's force a click on mouseup if target is a button
-            if (type === 'mouseup' && targetElement.tagName === 'BUTTON') {
-                targetElement.click();
-            }
+            canvas.dispatchEvent(event);
         }
 
         function handleImageUpload(e) {
