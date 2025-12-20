@@ -356,25 +356,24 @@
                 this.centerX = this.screenWidth / 2;
                 this.centerY = this.screenHeight / 2;
 
-                // 2. Strict Centering Logic (100% Center)
-                // We want the tree to be exactly in the middle of the screen.
-                // Tree logical size: Width ~600, Height ~750 (including star and trunk)
-                // Reserve some padding for safety, but center based on full screen.
+                // 2. Ultra-Safe Scaling (50% of screen height)
+                // We reduce size significantly to guarantee no clipping on any device
+                const safeHeight = this.screenHeight * 0.50;
+                const safeWidth = this.screenWidth * 0.80;
 
-                const safeHeight = this.screenHeight * 0.60; // Use 60% of screen height for the tree
-                const safeWidth = this.screenWidth * 0.85;   // Use 85% of screen width
-
+                // Tree vertical span is approx [-620, +40] relative to crownBase, total ~660 + star space
+                // We use 750 as divisor to be safe
                 const scaleX = safeWidth / 600;
                 const scaleY = safeHeight / 750;
                 this.treeScale = Math.min(scaleX, scaleY);
 
-                // 3. Position Crown Base
-                // The visual center of the tree structure is roughly 320 units above the crown base.
-                // We align this visual center to the screen center (50vh).
-                // Formula: CrownBaseY - (320 * scale) = ScreenHeight / 2
-                // So: CrownBaseY = ScreenHeight / 2 + (320 * scale)
+                // 3. Precise Geometric Centering
+                // Tree Top: crownBaseY - 620*scale (approx)
+                // Tree Bottom: crownBaseY + 40*scale (trunk bottom)
+                // Midpoint offset from crownBaseY: (-620 + 40) / 2 = -290
+                // We want: crownBaseY - 290*scale = ScreenHeight/2
 
-                this.crownBaseY = this.screenHeight / 2 + 320 * this.treeScale;
+                this.crownBaseY = this.screenHeight / 2 + 290 * this.treeScale;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
