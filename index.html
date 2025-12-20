@@ -356,28 +356,25 @@
                 this.centerX = this.screenWidth / 2;
                 this.centerY = this.screenHeight / 2;
 
-                // 2. ADAPTIVE Scaling (Fit-to-Box) with Safe Zones
-                // Define safe margins: Top for header/notch, Bottom for text
-                const padTop = this.screenHeight * (this.isMobileDevice ? 0.15 : 0.1);
-                const padBottom = this.screenHeight * (this.isMobileDevice ? 0.25 : 0.15); // Large bottom pad for text
-                const padSide = this.screenWidth * (this.isMobileDevice ? 0.15 : 0.1);
+                // 2. Strict Centering Logic (100% Center)
+                // We want the tree to be exactly in the middle of the screen.
+                // Tree logical size: Width ~600, Height ~750 (including star and trunk)
+                // Reserve some padding for safety, but center based on full screen.
 
-                const availableW = this.screenWidth - padSide * 2;
-                const availableH = this.screenHeight - padTop - padBottom;
+                const safeHeight = this.screenHeight * 0.60; // Use 60% of screen height for the tree
+                const safeWidth = this.screenWidth * 0.85;   // Use 85% of screen width
 
-                // Tree logical dimensions: Width ~600, Height ~700
-                const scaleX = availableW / 600;
-                const scaleY = availableH / 700;
+                const scaleX = safeWidth / 600;
+                const scaleY = safeHeight / 750;
                 this.treeScale = Math.min(scaleX, scaleY);
 
-                // 3. Robust Vertical Centering
-                // Position the visual center of the tree at the visual center of the available space
-                // Tree visual center is approx 310 units above crownBaseY
-                // We want: crownBaseY - 310*scale = (screenTop + padTop) + availableH/2
-                // Simplified: crownBaseY = (Top + Bottom)/2 + 310*scale
+                // 3. Position Crown Base
+                // The visual center of the tree structure is roughly 320 units above the crown base.
+                // We align this visual center to the screen center (50vh).
+                // Formula: CrownBaseY - (320 * scale) = ScreenHeight / 2
+                // So: CrownBaseY = ScreenHeight / 2 + (320 * scale)
 
-                const visibleCenterY = padTop + availableH / 2;
-                this.crownBaseY = visibleCenterY + 310 * this.treeScale;
+                this.crownBaseY = this.screenHeight / 2 + 320 * this.treeScale;
                 this.trunkBaseY = this.crownBaseY - 100 * this.treeScale;
             }
 
