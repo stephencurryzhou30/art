@@ -300,7 +300,7 @@
                     if (window.christmasAnimation && window.christmasAnimation.explosionFactor > 0.5) {
                         const now = Date.now();
                         if (now - lastSwipeTime > 500) { // Debounce
-                            h.historyX.push({ x: h.x, t: now });
+                            h.historyX.push({ x: h.x, y: h.y, t: now });
                             if (h.historyX.length > 20) h.historyX.shift(); // Increased history buffer
 
                             // Check for swipe
@@ -308,12 +308,13 @@
                                 const start = h.historyX[0];
                                 const end = h.historyX[h.historyX.length - 1];
                                 const diffX = end.x - start.x;
+                                const diffY = end.y - start.y;
                                 const dur = end.t - start.t;
 
                                 // Relaxed criteria: 
                                 // Duration: < 600ms (was 300ms) - allows slower swipes
                                 // Distance: > 10% (was 15%) - allows smaller swipes
-                                if (dur < 600 && Math.abs(diffX) > 10) {
+                                if (dur < 600 && Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
                                     if (diffX > 0) window.christmasAnimation.switchPhoto(-1); // Right swipe -> prev
                                     else window.christmasAnimation.switchPhoto(1); // Left swipe -> next
                                     lastSwipeTime = now;
