@@ -242,9 +242,10 @@
     <script type="module">
         import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
-        window.HAND_STATE = { gesture: 'IDLE', x: 0, y: 0, pinching: false, active: false };
+        window.HAND_STATE = { gesture: 'IDLE', x: 0, y: 0, pinching: false, active: false, historyX: [] };
         let handLandmarker;
         let running = false;
+        let lastSwipeTime = 0;
 
         window.APP = window.APP || {};
         window.APP.initCamera = async () => {
@@ -290,9 +291,40 @@
 
                     if (ext === 4) h.gesture = 'OPEN_PALM';
                     else if (ext === 0) h.gesture = 'FIST';
+                    else if (ext === 1 && tips[0] === 8) h.gesture = 'POINT'; // Simplified check for pointing
                     else h.gesture = 'POINT';
 
                     h.x = (1 - lm[8].x) * 100; h.y = lm[8].y * 100;
+
+                    // Swipe Detection logic
+                    if (window.christmasAnimation) {
+                        const now = Date.now();
+                        if (now - lastSwipeTime > 500) { // Debounce
+                            h.historyX.push({ x: h.x, t: now });
+                            if (h.historyX.length > 10) h.historyX.shift();
+
+                            // Check for swipe
+                            if (h.historyX.length >= 5) {
+                                const start = h.historyX[0];
+                                const end = h.historyX[h.historyX.length - 1];
+                                const diffX = end.x - start.x;
+                                const dur = end.t - start.t;
+
+                                if (dur < 300 && Math.abs(diffX) > 15) { // Fast movement
+                                    if (diffX > 0) window.christmasAnimation.switchPhoto(-1); // Right swipe -> prev
+                                    else window.christmasAnimation.switchPhoto(1); // Left swipe -> next
+                                    lastSwipeTime = now;
+                                    h.historyX = [];
+
+                                    // Visual Feedback
+                                    const cur = document.getElementById('hand-cursor');
+                                    cur.style.borderColor = "#FF0000";
+                                    setTimeout(() => cur.style.borderColor = "cyan", 200);
+                                }
+                            }
+                        }
+                    }
+
                     const cur = document.getElementById('hand-cursor');
                     cur.style.left = h.x + '%'; cur.style.top = h.y + '%';
 
@@ -303,7 +335,7 @@
                     if (h.pinching) cur.classList.add('pinching'); else cur.classList.remove('pinching');
                     if (!wasPinching && h.pinching && window.christmasAnimation) window.christmasAnimation.handleHandClick(h.x, h.y);
                     cur.style.borderColor = (h.gesture === 'OPEN_PALM' ? 'magenta' : (h.gesture === 'FIST' ? 'yellow' : 'cyan'));
-                } else { h.active = false; h.gesture = 'IDLE'; }
+                } else { h.active = false; h.gesture = 'IDLE'; h.historyX = []; }
             }
             requestAnimationFrame(predictWebcam);
         }
@@ -320,6 +352,7 @@
                     this.loading = document.getElementById('loading');
 
                     this.photos = [];
+                    this.currentPhotoIndex = 0;
                     this.explosionFactor = 0;
 
                     this.isMobileDevice = isMobile;
@@ -579,8 +612,46 @@
             }
 
             handleClick(cx, cy) {
-                // 点击处理
+                const allGifts = [...this.gifts, ...this.upperGifts, ...this.topGifts];
+                for (let g of allGifts) {
+                    if (g.calcX && g.calcY) {
+                        const d = Math.hypot(g.calcX - cx, g.calcY - cy);
+                        // Increase hit area slightly for better usability
+                        if (d < g.size * g.calcScale * 1.5) {
+                            if (g.photo) {
+                                this.currentPhotoIndex = this.photos.indexOf(g.photo);
+                                if (this.currentPhotoIndex === -1) this.currentPhotoIndex = 0;
+                                this.updateModalPhoto();
+                                document.getElementById('photoModal').style.display = 'flex';
+                            } else if (this.photos.length > 0) {
+                                this.currentPhotoIndex = 0;
+                                this.updateModalPhoto();
+                                document.getElementById('photoModal').style.display = 'flex';
+                            }
+                            break;
+                        }
+                    }
+                }
             }
+
+            switchPhoto(dir) {
+                const modal = document.getElementById('photoModal');
+                if (!modal || modal.style.display === 'none') return;
+                if (this.photos.length === 0) return;
+
+                this.currentPhotoIndex += dir;
+                if (this.currentPhotoIndex < 0) this.currentPhotoIndex = this.photos.length - 1;
+                if (this.currentPhotoIndex >= this.photos.length) this.currentPhotoIndex = 0;
+
+                this.updateModalPhoto();
+            }
+
+            updateModalPhoto() {
+                if (this.photos.length > 0 && this.photos[this.currentPhotoIndex]) {
+                    document.getElementById('photoContent').src = this.photos[this.currentPhotoIndex].src;
+                }
+            }
+
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
             update() {
