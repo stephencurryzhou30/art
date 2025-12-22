@@ -242,10 +242,9 @@
     <script type="module">
         import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
-        window.HAND_STATE = { gesture: 'IDLE', x: 0, y: 0, pinching: false, active: false, historyX: [] };
+        window.HAND_STATE = { gesture: 'IDLE', x: 0, y: 0, pinching: false, active: false };
         let handLandmarker;
         let running = false;
-        let lastSwipeTime = 0;
 
         window.APP = window.APP || {};
         window.APP.initCamera = async () => {
@@ -291,44 +290,9 @@
 
                     if (ext === 4) h.gesture = 'OPEN_PALM';
                     else if (ext === 0) h.gesture = 'FIST';
-                    else if (ext === 1 && tips[0] === 8) h.gesture = 'POINT'; // Simplified check for pointing
                     else h.gesture = 'POINT';
 
                     h.x = (1 - lm[8].x) * 100; h.y = lm[8].y * 100;
-
-                    // Swipe Detection logic
-                    if (window.christmasAnimation && window.christmasAnimation.explosionFactor > 0.5) {
-                        const now = Date.now();
-                        if (now - lastSwipeTime > 500) { // Debounce
-                            h.historyX.push({ x: h.x, y: h.y, t: now });
-                            if (h.historyX.length > 20) h.historyX.shift(); // Increased history buffer
-
-                            // Check for swipe
-                            if (h.historyX.length >= 5) {
-                                const start = h.historyX[0];
-                                const end = h.historyX[h.historyX.length - 1];
-                                const diffX = end.x - start.x;
-                                const diffY = end.y - start.y;
-                                const dur = end.t - start.t;
-
-                                // Relaxed criteria: 
-                                // Duration: < 600ms (was 300ms) - allows slower swipes
-                                // Distance: > 10% (was 15%) - allows smaller swipes
-                                if (dur < 600 && Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
-                                    if (diffX > 0) window.christmasAnimation.switchPhoto(-1); // Right swipe -> prev
-                                    else window.christmasAnimation.switchPhoto(1); // Left swipe -> next
-                                    lastSwipeTime = now;
-                                    h.historyX = [];
-
-                                    // Visual Feedback
-                                    const cur = document.getElementById('hand-cursor');
-                                    cur.style.borderColor = "#FF0000";
-                                    setTimeout(() => cur.style.borderColor = "cyan", 200);
-                                }
-                            }
-                        }
-                    }
-
                     const cur = document.getElementById('hand-cursor');
                     cur.style.left = h.x + '%'; cur.style.top = h.y + '%';
 
@@ -339,7 +303,7 @@
                     if (h.pinching) cur.classList.add('pinching'); else cur.classList.remove('pinching');
                     if (!wasPinching && h.pinching && window.christmasAnimation) window.christmasAnimation.handleHandClick(h.x, h.y);
                     cur.style.borderColor = (h.gesture === 'OPEN_PALM' ? 'magenta' : (h.gesture === 'FIST' ? 'yellow' : 'cyan'));
-                } else { h.active = false; h.gesture = 'IDLE'; h.historyX = []; }
+                } else { h.active = false; h.gesture = 'IDLE'; }
             }
             requestAnimationFrame(predictWebcam);
         }
@@ -356,9 +320,7 @@
                     this.loading = document.getElementById('loading');
 
                     this.photos = [];
-                    this.currentPhotoIndex = 0;
                     this.explosionFactor = 0;
-                    this.modalTimer = null;
 
                     this.isMobileDevice = isMobile;
                     this.performanceMultiplier = isMobile ? 0.7 : 1;
@@ -617,61 +579,8 @@
             }
 
             handleClick(cx, cy) {
-                const allGifts = [...this.gifts, ...this.upperGifts, ...this.topGifts];
-                for (let g of allGifts) {
-                    if (g.calcX && g.calcY) {
-                        const d = Math.hypot(g.calcX - cx, g.calcY - cy);
-                        // Increase hit area slightly for better usability
-                        if (d < g.size * g.calcScale * 1.5) {
-                            if (g.photo) {
-                                this.currentPhotoIndex = this.photos.indexOf(g.photo);
-                                if (this.currentPhotoIndex === -1) this.currentPhotoIndex = 0;
-                                this.updateModalPhoto();
-                                document.getElementById('photoModal').style.display = 'flex';
-                                this.resetModalTimer();
-                            } else if (this.photos.length > 0) {
-                                this.currentPhotoIndex = 0;
-                                this.updateModalPhoto();
-                                document.getElementById('photoModal').style.display = 'flex';
-                                this.resetModalTimer();
-                            }
-                            break;
-                        }
-                    }
-                }
+                // 点击处理
             }
-
-            switchPhoto(dir) {
-                const modal = document.getElementById('photoModal');
-                if (!modal || modal.style.display === 'none') {
-                    // If hidden, show it first (auto-open on swipe in scattered mode)
-                    modal.style.display = 'flex';
-                    this.resetModalTimer();
-                    return;
-                }
-                if (this.photos.length === 0) return;
-
-                this.currentPhotoIndex += dir;
-                if (this.currentPhotoIndex < 0) this.currentPhotoIndex = this.photos.length - 1;
-                if (this.currentPhotoIndex >= this.photos.length) this.currentPhotoIndex = 0;
-
-                this.updateModalPhoto();
-                this.resetModalTimer();
-            }
-
-            resetModalTimer() {
-                if (this.modalTimer) clearTimeout(this.modalTimer);
-                this.modalTimer = setTimeout(() => {
-                    document.getElementById('photoModal').style.display = 'none';
-                }, 3000);
-            }
-
-            updateModalPhoto() {
-                if (this.photos.length > 0 && this.photos[this.currentPhotoIndex]) {
-                    document.getElementById('photoContent').src = this.photos[this.currentPhotoIndex].src;
-                }
-            }
-
             handleHandClick(px, py) { this.handleClick(px / 100 * this.screenWidth, py / 100 * this.screenHeight); }
 
             update() {
