@@ -297,7 +297,7 @@
                     h.x = (1 - lm[8].x) * 100; h.y = lm[8].y * 100;
 
                     // Swipe Detection logic
-                    if (window.christmasAnimation) {
+                    if (window.christmasAnimation && window.christmasAnimation.explosionFactor > 0.5) {
                         const now = Date.now();
                         if (now - lastSwipeTime > 500) { // Debounce
                             h.historyX.push({ x: h.x, t: now });
@@ -354,6 +354,7 @@
                     this.photos = [];
                     this.currentPhotoIndex = 0;
                     this.explosionFactor = 0;
+                    this.modalTimer = null;
 
                     this.isMobileDevice = isMobile;
                     this.performanceMultiplier = isMobile ? 0.7 : 1;
@@ -623,10 +624,12 @@
                                 if (this.currentPhotoIndex === -1) this.currentPhotoIndex = 0;
                                 this.updateModalPhoto();
                                 document.getElementById('photoModal').style.display = 'flex';
+                                this.resetModalTimer();
                             } else if (this.photos.length > 0) {
                                 this.currentPhotoIndex = 0;
                                 this.updateModalPhoto();
                                 document.getElementById('photoModal').style.display = 'flex';
+                                this.resetModalTimer();
                             }
                             break;
                         }
@@ -636,7 +639,12 @@
 
             switchPhoto(dir) {
                 const modal = document.getElementById('photoModal');
-                if (!modal || modal.style.display === 'none') return;
+                if (!modal || modal.style.display === 'none') {
+                    // If hidden, show it first (auto-open on swipe in scattered mode)
+                    modal.style.display = 'flex';
+                    this.resetModalTimer();
+                    return;
+                }
                 if (this.photos.length === 0) return;
 
                 this.currentPhotoIndex += dir;
@@ -644,6 +652,14 @@
                 if (this.currentPhotoIndex >= this.photos.length) this.currentPhotoIndex = 0;
 
                 this.updateModalPhoto();
+                this.resetModalTimer();
+            }
+
+            resetModalTimer() {
+                if (this.modalTimer) clearTimeout(this.modalTimer);
+                this.modalTimer = setTimeout(() => {
+                    document.getElementById('photoModal').style.display = 'none';
+                }, 3000);
             }
 
             updateModalPhoto() {
